@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/YiboCodexHUD.Core/YiboCodexHUD.Core.csproj" />
+    <Project Path="src/YiboCodexHUD.Desktop/YiboCodexHUD.Desktop.csproj" />
+    <Project Path="src/YiboCodexHUD.Infrastructure/YiboCodexHUD.Infrastructure.csproj" />
+    <Project Path="src/YiboCodexHUD.WindowsInterop/YiboCodexHUD.WindowsInterop.csproj" />
+  </Folder>
+</Solution>

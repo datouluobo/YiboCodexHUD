@@ -1,0 +1,607 @@
+<Window x:Class="YiboCodexHUD.Desktop.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="YiboCodexHUD 设置"
+        Width="620"
+        Height="820"
+        MinWidth="560"
+        MinHeight="700"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize"
+        Background="#FFF6F6F4">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock FontSize="24"
+                       FontWeight="SemiBold"
+                       Foreground="#1E1E1C"
+                       Text="设置" />
+            <TextBlock Margin="0,8,0,0"
+                       Foreground="#5B5B57"
+                       Text="按主题分组到标签页里，常用项会更容易找到。"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Border Grid.Row="1"
+                Margin="0,18,0,0"
+                Padding="0"
+                CornerRadius="14"
+                Background="White"
+                BorderBrush="#FFE1E0DA"
+                BorderThickness="1">
+            <TabControl Background="Transparent"
+                        BorderThickness="0"
+                        Padding="12">
+                <TabItem Header="显示">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Padding="12">
+                        <StackPanel>
+                            <Border Padding="16"
+                                    CornerRadius="12"
+                                    Background="#FFF9F8F3"
+                                    BorderBrush="#FFE8E3D7"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1E1E1C"
+                                               Text="显示内容" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#6A6A65"
+                                               Text="{Binding DisplayItemsHintText}"
+                                               TextWrapping="Wrap" />
+
+                                    <CheckBox Margin="0,14,0,0"
+                                              Content="{Binding ShortWindowMenuText}"
+                                              IsEnabled="{Binding CanToggleShortWindow}"
+                                              IsChecked="{Binding ShowShortWindow, Mode=OneWay}"
+                                              Command="{Binding ToggleShortWindowCommand}" />
+                                    <StackPanel Margin="24,8,0,0"
+                                                IsEnabled="{Binding ShowShortWindow}">
+                                        <CheckBox Content="显示窗口标签"
+                                                  IsChecked="{Binding ShowShortWindowLabel, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowShortWindowLabelCommand}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="显示剩余百分比"
+                                                  IsChecked="{Binding ShowShortRemainingPercent, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowShortRemainingPercentCommand}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="显示重置时间"
+                                                  IsChecked="{Binding ShowShortResetTime, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowShortResetTimeCommand}" />
+                                    </StackPanel>
+
+                                    <CheckBox Margin="0,14,0,0"
+                                              Content="{Binding LongWindowMenuText}"
+                                              IsEnabled="{Binding CanToggleLongWindow}"
+                                              IsChecked="{Binding ShowLongWindow, Mode=OneWay}"
+                                              Command="{Binding ToggleLongWindowCommand}" />
+                                    <StackPanel Margin="24,8,0,0"
+                                                IsEnabled="{Binding ShowLongWindow}">
+                                        <CheckBox Content="显示窗口标签"
+                                                  IsChecked="{Binding ShowLongWindowLabel, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowLongWindowLabelCommand}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="显示剩余百分比"
+                                                  IsChecked="{Binding ShowLongRemainingPercent, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowLongRemainingPercentCommand}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="显示重置日期"
+                                                  IsChecked="{Binding ShowLongResetTime, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowLongResetTimeCommand}" />
+                                    </StackPanel>
+
+                                    <CheckBox Margin="0,14,0,0"
+                                              Content="显示重置次数"
+                                              IsEnabled="{Binding CanToggleResetCredits}"
+                                              IsChecked="{Binding ShowResetCredits, Mode=OneWay}"
+                                              Command="{Binding ToggleResetCreditsCommand}" />
+                                    <StackPanel Margin="24,8,0,0"
+                                                IsEnabled="{Binding ShowResetCredits}">
+                                        <CheckBox Content="显示“重置次数”标签"
+                                                  IsChecked="{Binding ShowResetCreditsLabel, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowResetCreditsLabelCommand}" />
+                                    </StackPanel>
+
+                                    <CheckBox Margin="0,14,0,0"
+                                              Content="使用圆点分隔各显示段"
+                                              IsChecked="{Binding ShowSeparatorDots, Mode=OneWay}"
+                                              Command="{Binding ToggleShowSeparatorDotsCommand}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,16,0,0"
+                                    Padding="16"
+                                    CornerRadius="12"
+                                    Background="#FFF9F8F3"
+                                    BorderBrush="#FFE8E3D7"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1E1E1C"
+                                               Text="显示顺序" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#6A6A65"
+                                               Text="控制短周期、长周期和重置次数在 HUD 中的先后顺序。"
+                                               TextWrapping="Wrap" />
+
+                                    <ItemsControl Margin="0,14,0,0"
+                                                  ItemsSource="{Binding DisplayOrderRows}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,10">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="72" />
+                                                        <ColumnDefinition Width="72" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding Summary}" />
+                                                    <Button Grid.Column="1"
+                                                            Margin="10,0,0,0"
+                                                            Padding="10,6"
+                                                            IsEnabled="{Binding CanMoveUp}"
+                                                            Command="{Binding MoveUpCommand}"
+                                                            Content="上移" />
+                                                    <Button Grid.Column="2"
+                                                            Margin="10,0,0,0"
+                                                            Padding="10,6"
+                                                            IsEnabled="{Binding CanMoveDown}"
+                                                            Command="{Binding MoveDownCommand}"
+                                                            Content="下移" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="外观">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Padding="12">
+                        <StackPanel>
+                            <Border Padding="16"
+                                    CornerRadius="12"
+                                    Background="#FFF9F8F3"
+                                    BorderBrush="#FFE8E3D7"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1E1E1C"
+                                               Text="显示方式" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#6A6A65"
+                                               Text="选择 HUD 的显示密度和阅读大小。" />
+
+                                    <TextBlock Margin="0,14,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="#2B2B28"
+                                               Text="显示模式" />
+                                    <StackPanel Margin="0,8,0,0">
+                                        <RadioButton Content="自动"
+                                                     IsChecked="{Binding IsDisplayModeAuto, Mode=OneWay}"
+                                                     Command="{Binding SetDisplayModeAutoCommand}" />
+                                        <RadioButton Margin="0,6,0,0"
+                                                     Content="完整"
+                                                     IsChecked="{Binding IsDisplayModeFull, Mode=OneWay}"
+                                                     Command="{Binding SetDisplayModeFullCommand}" />
+                                        <RadioButton Margin="0,6,0,0"
+                                                     Content="紧凑"
+                                                     IsChecked="{Binding IsDisplayModeCompact, Mode=OneWay}"
+                                                     Command="{Binding SetDisplayModeCompactCommand}" />
+                                    </StackPanel>
+
+                                    <TextBlock Margin="0,14,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="#2B2B28"
+                                               Text="字号" />
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <RadioButton Margin="0,0,18,8"
+                                                     Content="14"
+                                                     IsChecked="{Binding IsFontSize14, Mode=OneWay}"
+                                                     Command="{Binding SetFontSize14Command}" />
+                                        <RadioButton Margin="0,0,18,8"
+                                                     Content="16"
+                                                     IsChecked="{Binding IsFontSize16, Mode=OneWay}"
+                                                     Command="{Binding SetFontSize16Command}" />
+                                        <RadioButton Margin="0,0,18,8"
+                                                     Content="18"
+                                                     IsChecked="{Binding IsFontSize18, Mode=OneWay}"
+                                                     Command="{Binding SetFontSize18Command}" />
+                                        <RadioButton Margin="0,0,18,8"
+                                                     Content="20"
+                                                     IsChecked="{Binding IsFontSize20, Mode=OneWay}"
+                                                     Command="{Binding SetFontSize20Command}" />
+                                        <RadioButton Margin="0,0,18,8"
+                                                     Content="22"
+                                                     IsChecked="{Binding IsFontSize22, Mode=OneWay}"
+                                                     Command="{Binding SetFontSize22Command}" />
+                                        <RadioButton Margin="0,0,18,8"
+                                                     Content="24"
+                                                     IsChecked="{Binding IsFontSize24, Mode=OneWay}"
+                                                     Command="{Binding SetFontSize24Command}" />
+                                    </WrapPanel>
+
+                                    <CheckBox Margin="0,12,0,0"
+                                              Content="Codex 不可用时隐藏"
+                                              IsChecked="{Binding HideWhenCodexUnavailable, Mode=OneWay}"
+                                              Command="{Binding ToggleHideWhenCodexUnavailableCommand}" />
+
+                                    <TextBlock Margin="0,18,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="#2B2B28"
+                                               Text="文本透明度" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="72" />
+                                        </Grid.ColumnDefinitions>
+                                        <Slider Grid.Column="0"
+                                                Minimum="10"
+                                                Maximum="100"
+                                                TickFrequency="10"
+                                                IsSnapToTickEnabled="True"
+                                                SmallChange="10"
+                                                LargeChange="10"
+                                                Value="{Binding TextOpacityEditorPercent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Grid.Column="1"
+                                                   Margin="12,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding TextOpacitySummary}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="位置与颜色">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Padding="12">
+                        <StackPanel>
+                            <Border Padding="16"
+                                    CornerRadius="12"
+                                    Background="#FFF9F8F3"
+                                    BorderBrush="#FFE8E3D7"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1E1E1C"
+                                               Text="位置微调" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#6A6A65"
+                                               Text="仍然跟随 Codex 标题栏，只在最终位置上叠加偏移。"
+                                               TextWrapping="Wrap" />
+
+                                    <TextBlock Margin="0,14,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="#2B2B28"
+                                               Text="{Binding PositionOffsetSummary}" />
+
+                                    <WrapPanel Margin="0,12,0,0">
+                                        <Button Width="82"
+                                                Padding="10,6"
+                                                Command="{Binding NudgePositionLeftCommand}"
+                                                Content="左移" />
+                                        <Button Width="82"
+                                                Margin="8,0,0,0"
+                                                Padding="10,6"
+                                                Command="{Binding NudgePositionUpCommand}"
+                                                Content="上移" />
+                                        <Button Width="82"
+                                                Margin="8,0,0,0"
+                                                Padding="10,6"
+                                                Command="{Binding NudgePositionDownCommand}"
+                                                Content="下移" />
+                                        <Button Width="82"
+                                                Margin="8,0,0,0"
+                                                Padding="10,6"
+                                                Command="{Binding NudgePositionRightCommand}"
+                                                Content="右移" />
+                                        <Button Width="132"
+                                                Margin="8,0,0,0"
+                                                Padding="10,6"
+                                                Command="{Binding ResetPositionCommand}"
+                                                Content="恢复默认位置" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,16,0,0"
+                                    Padding="16"
+                                    CornerRadius="12"
+                                    Background="#FFF9F8F3"
+                                    BorderBrush="#FFE8E3D7"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1E1E1C"
+                                               Text="颜色" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#6A6A65"
+                                               Text="{Binding ColorModeHintText}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,6,0,0"
+                                               Foreground="#7A756C"
+                                               Text="颜色和阈值在输入框失去焦点后自动保存。"
+                                               TextWrapping="Wrap" />
+
+                                    <StackPanel Margin="0,14,0,0">
+                                        <RadioButton Content="默认"
+                                                     IsChecked="{Binding IsColorModeDefault, Mode=OneWay}"
+                                                     Command="{Binding SetColorModeDefaultCommand}" />
+                                        <RadioButton Margin="0,6,0,0"
+                                                     Content="单色自定义"
+                                                     IsChecked="{Binding IsColorModeCustom, Mode=OneWay}"
+                                                     Command="{Binding SetColorModeCustomCommand}" />
+                                        <RadioButton Margin="0,6,0,0"
+                                                     Content="余量百分比动态变色"
+                                                     IsChecked="{Binding IsColorModeDynamic, Mode=OneWay}"
+                                                     Command="{Binding SetColorModeDynamicCommand}" />
+                                    </StackPanel>
+
+                                    <Grid Margin="0,16,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="70" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   VerticalAlignment="Center"
+                                                   Text="基础颜色" />
+                                        <TextBox Grid.Column="1"
+                                                 Margin="8,0,0,0"
+                                                 VerticalAlignment="Center"
+                                                 Text="{Binding BaseForegroundColorInput, UpdateSourceTrigger=LostFocus}" />
+                                        <Border Grid.Column="2"
+                                                Width="28"
+                                                Height="28"
+                                                Margin="10,0,0,0"
+                                                CornerRadius="6"
+                                                BorderBrush="#FFD8D4CB"
+                                                BorderThickness="1"
+                                                Background="{Binding BaseForegroundPreviewBrush}" />
+                                    </Grid>
+
+                                    <StackPanel Margin="0,16,0,0"
+                                                IsEnabled="{Binding IsColorModeDynamic}">
+                                        <TextBlock Foreground="#6A6A65"
+                                                   Text="{Binding ThresholdHintText}"
+                                                   TextWrapping="Wrap" />
+
+                                        <Grid Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="120" />
+                                                <ColumnDefinition Width="90" />
+                                                <ColumnDefinition Width="120" />
+                                                <ColumnDefinition Width="90" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0"
+                                                       VerticalAlignment="Center"
+                                                       Text="中余量阈值 %" />
+                                            <TextBox Grid.Column="1"
+                                                     Margin="8,0,0,0"
+                                                     VerticalAlignment="Center"
+                                                     Text="{Binding DynamicMediumThresholdPercentInput, UpdateSourceTrigger=LostFocus}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Margin="12,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       Text="低余量阈值 %" />
+                                            <TextBox Grid.Column="3"
+                                                     Margin="8,0,0,0"
+                                                     VerticalAlignment="Center"
+                                                     Text="{Binding DynamicLowThresholdPercentInput, UpdateSourceTrigger=LostFocus}" />
+                                        </Grid>
+
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="70" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0"
+                                                       VerticalAlignment="Center"
+                                                       Text="高余量颜色" />
+                                            <TextBox Grid.Column="1"
+                                                     Margin="8,0,0,0"
+                                                     VerticalAlignment="Center"
+                                                     Text="{Binding DynamicHighRemainingColorInput, UpdateSourceTrigger=LostFocus}" />
+                                            <Border Grid.Column="2"
+                                                    Width="28"
+                                                    Height="28"
+                                                    Margin="10,0,0,0"
+                                                    CornerRadius="6"
+                                                    BorderBrush="#FFD8D4CB"
+                                                    BorderThickness="1"
+                                                    Background="{Binding DynamicHighRemainingPreviewBrush}" />
+                                        </Grid>
+
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="70" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0"
+                                                       VerticalAlignment="Center"
+                                                       Text="中余量颜色" />
+                                            <TextBox Grid.Column="1"
+                                                     Margin="8,0,0,0"
+                                                     VerticalAlignment="Center"
+                                                     Text="{Binding DynamicMediumRemainingColorInput, UpdateSourceTrigger=LostFocus}" />
+                                            <Border Grid.Column="2"
+                                                    Width="28"
+                                                    Height="28"
+                                                    Margin="10,0,0,0"
+                                                    CornerRadius="6"
+                                                    BorderBrush="#FFD8D4CB"
+                                                    BorderThickness="1"
+                                                    Background="{Binding DynamicMediumRemainingPreviewBrush}" />
+                                        </Grid>
+
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="70" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0"
+                                                       VerticalAlignment="Center"
+                                                       Text="低余量颜色" />
+                                            <TextBox Grid.Column="1"
+                                                     Margin="8,0,0,0"
+                                                     VerticalAlignment="Center"
+                                                     Text="{Binding DynamicLowRemainingColorInput, UpdateSourceTrigger=LostFocus}" />
+                                            <Border Grid.Column="2"
+                                                    Width="28"
+                                                    Height="28"
+                                                    Margin="10,0,0,0"
+                                                    CornerRadius="6"
+                                                    BorderBrush="#FFD8D4CB"
+                                                    BorderThickness="1"
+                                                    Background="{Binding DynamicLowRemainingPreviewBrush}" />
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <Button Margin="0,16,0,0"
+                                            Width="108"
+                                            Padding="12,6"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding ResetColorsToDefaultCommand}"
+                                            Content="恢复默认色" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="刷新与启动">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Padding="12">
+                        <StackPanel>
+                            <Border Padding="16"
+                                    CornerRadius="12"
+                                    Background="#FFF9F8F3"
+                                    BorderBrush="#FFE8E3D7"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1E1E1C"
+                                               Text="刷新策略" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#6A6A65"
+                                               Text="{Binding AutoRefreshHintText}"
+                                               TextWrapping="Wrap" />
+
+                                    <CheckBox Margin="0,14,0,0"
+                                              Content="自动刷新"
+                                              IsChecked="{Binding AutoRefreshEnabled, Mode=OneWay}"
+                                              Command="{Binding ToggleAutoRefreshCommand}" />
+
+                                    <TextBlock Margin="0,14,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="#2B2B28"
+                                               Text="刷新频率" />
+                                    <StackPanel Margin="0,8,0,0"
+                                                IsEnabled="{Binding AutoRefreshEnabled}">
+                                        <RadioButton Content="20 秒"
+                                                     IsChecked="{Binding IsRefreshEvery20Seconds, Mode=OneWay}"
+                                                     Command="{Binding SetRefreshEvery20SecondsCommand}" />
+                                        <RadioButton Margin="0,6,0,0"
+                                                     Content="1 分钟"
+                                                     IsChecked="{Binding IsRefreshEvery60Seconds, Mode=OneWay}"
+                                                     Command="{Binding SetRefreshEvery60SecondsCommand}" />
+                                        <RadioButton Margin="0,6,0,0"
+                                                     Content="5 分钟"
+                                                     IsChecked="{Binding IsRefreshEvery300Seconds, Mode=OneWay}"
+                                                     Command="{Binding SetRefreshEvery300SecondsCommand}" />
+                                    </StackPanel>
+
+                                    <Button Margin="0,16,0,0"
+                                            Width="96"
+                                            HorizontalAlignment="Left"
+                                            Padding="12,6"
+                                            Command="{Binding RefreshNowCommand}"
+                                            Content="立即刷新" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,16,0,0"
+                                    Padding="16"
+                                    CornerRadius="12"
+                                    Background="#FFF9F8F3"
+                                    BorderBrush="#FFE8E3D7"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1E1E1C"
+                                               Text="启动行为" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#6A6A65"
+                                               Text="仅在本次 HUD 启动阶段尝试一次，不会持续守护重启 Codex。"
+                                               TextWrapping="Wrap" />
+
+                                    <CheckBox Margin="0,14,0,0"
+                                              Content="启动 HUD 时自动启动 Codex"
+                                              IsChecked="{Binding AutoLaunchCodexOnStartup, Mode=OneWay}"
+                                              Command="{Binding ToggleAutoLaunchCodexOnStartupCommand}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,16,0,0"
+                                    Padding="16"
+                                    CornerRadius="12"
+                                    Background="#FFF9F8F3"
+                                    BorderBrush="#FFE8E3D7"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#1E1E1C"
+                                               Text="导入与导出" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#6A6A65"
+                                               Text="把当前 HUD 设置保存成 JSON，或者从已有 JSON 恢复。"
+                                               TextWrapping="Wrap" />
+
+                                    <WrapPanel Margin="0,14,0,0">
+                                        <Button Width="120"
+                                                Padding="12,6"
+                                                Command="{Binding ExportSettingsCommand}"
+                                                Content="导出设置" />
+                                        <Button Width="120"
+                                                Margin="12,0,0,0"
+                                                Padding="12,6"
+                                                Command="{Binding ImportSettingsCommand}"
+                                                Content="导入设置" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+        </Border>
+    </Grid>
+</Window>
