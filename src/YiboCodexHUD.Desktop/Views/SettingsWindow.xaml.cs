@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using YiboCodexHUD.Desktop.ViewModels;
@@ -7,6 +8,7 @@ namespace YiboCodexHUD.Desktop.Views;
 
 public partial class SettingsWindow : Window
 {
+    private const string GitHubUrl = "https://github.com/datouluobo/YiboCodexHUD";
     private readonly DispatcherTimer _persistBoundsTimer;
     private bool _isApplyingStoredBounds;
 
@@ -66,6 +68,26 @@ public partial class SettingsWindow : Window
 
         _persistBoundsTimer.Stop();
         _persistBoundsTimer.Start();
+    }
+
+    private void OnOpenGitHubClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = GitHubUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"无法打开 GitHub 页面：{ex.Message}",
+                "打开链接失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)

@@ -3,6 +3,7 @@ obj/
 .vs/
 .vscode/
 .tmp/
+dist/
 
 *.user
 *.suo

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>YiboCodexHUD.Setup</AssemblyName>
+    <RootNamespace>YiboCodexHUD.Setup</RootNamespace>
+    <ApplicationIcon>..\..\assets\YiboCodexHUD.ico</ApplicationIcon>
+    <Authors>YiboSoft</Authors>
+    <Company>YiboSoft</Company>
+    <Product>YiboCodexHUD</Product>
+    <Version>1.0.2</Version>
+    <FileVersion>1.0.2.0</FileVersion>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <InformationalVersion>1.0.2</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(PayloadZipPath)' != ''">
+    <EmbeddedResource Include="$(PayloadZipPath)" LogicalName="payload.zip" />
+  </ItemGroup>
+
+</Project>
