@@ -8,16 +8,20 @@ namespace YiboCodexHUD.Infrastructure.Services;
 public sealed class RateLimitService : IRateLimitService
 {
     private readonly CodexProtocolClient _protocolClient;
+    private readonly RateLimitResetCreditWebService _resetCreditWebService;
     private readonly IClock _clock;
     private readonly ILogger<RateLimitService> _logger;
     private UsageSnapshot? _lastSuccessfulSnapshot;
+    private bool _hasLoggedMissingResetCredits;
 
     public RateLimitService(
         CodexProtocolClient protocolClient,
+        RateLimitResetCreditWebService resetCreditWebService,
         IClock clock,
         ILogger<RateLimitService> logger)
     {
         _protocolClient = protocolClient;
+        _resetCreditWebService = resetCreditWebService;
         _clock = clock;
         _logger = logger;
     }
@@ -37,7 +41,24 @@ public sealed class RateLimitService : IRateLimitService
                     cancellationToken);
 
                 var snapshot = rateLimitsResponse?.RateLimits
-                    ?? throw new InvalidOperationException("Codex app-server returned no rate limit snapshot.");
+                    ?? throw new InvalidOperationException("Codex/ChatGPT app-server returned no rate limit snapshot.");
+                var resetCredits = rateLimitsResponse.RateLimitResetCredits ?? rateLimitsResponse.SnakeCaseRateLimitResetCredits;
+                if (resetCredits is null || (resetCredits.AvailableCount is null && resetCredits.SnakeCaseAvailableCount is null && (resetCredits.Credits is null || resetCredits.Credits.Count == 0)))
+                {
+                    resetCredits = await _resetCreditWebService.TryFetchAsync(cancellationToken) ?? resetCredits;
+                }
+
+                var resetCreditExpirations = GetResetCreditExpirations(resetCredits);
+                var resetCreditsAvailable = GetResetCreditsAvailable(resetCredits, resetCreditExpirations);
+
+                if (resetCredits is null && !_hasLoggedMissingResetCredits)
+                {
+                    _hasLoggedMissingResetCredits = true;
+                    _logger.LogInformation(
+                        "Codex/ChatGPT rate-limit response did not include reset credit metadata. Top-level fields: {TopLevelFields}. rateLimits fields: {RateLimitFields}.",
+                        FormatAvailableFields(rateLimitsResponse.ExtensionData),
+                        FormatAvailableFields(snapshot.ExtensionData));
+                }
 
                 _lastSuccessfulSnapshot = new UsageSnapshot
                 {
@@ -49,9 +70,18 @@ public sealed class RateLimitService : IRateLimitService
                     LongWindowUsedPercent = snapshot.Secondary?.UsedPercent,
                     LongWindowMinutes = snapshot.Secondary?.WindowDurationMins,
                     LongWindowResetsAt = ToDateTimeOffset(snapshot.Secondary?.ResetsAt),
-                    ResetCreditsAvailable = rateLimitsResponse.RateLimitResetCredits?.AvailableCount,
+                    ResetCreditsAvailable = resetCreditsAvailable,
+                    ResetCreditExpirations = resetCreditExpirations,
                     FetchedAt = fetchedAt
                 };
+
+                if (resetCreditExpirations.Count > 0)
+                {
+                    _logger.LogInformation(
+                        "Resolved {ResetCreditCount} rate-limit reset credits. Expirations: {Expirations}.",
+                        resetCreditsAvailable,
+                        string.Join(", ", resetCreditExpirations.Select(static value => value.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))));
+                }
 
                 _logger.LogInformation("Fetched live rate-limit snapshot at {FetchedAt} on attempt {Attempt}.", fetchedAt, attempt);
                 return _lastSuccessfulSnapshot;
@@ -80,4 +110,105 @@ public sealed class RateLimitService : IRateLimitService
 
     private static DateTimeOffset? ToDateTimeOffset(long? unixSeconds) =>
         unixSeconds is null ? null : DateTimeOffset.FromUnixTimeSeconds(unixSeconds.Value);
+
+    private static int? GetResetCreditsAvailable(
+        CodexRateLimitResetCredits? resetCredits,
+        IReadOnlyList<DateTimeOffset> resetCreditExpirations)
+    {
+        if (resetCredits is null)
+        {
+            return null;
+        }
+
+        if (resetCredits.AvailableCount.HasValue)
+        {
+            return resetCredits.AvailableCount.Value;
+        }
+
+        if (resetCredits.SnakeCaseAvailableCount.HasValue)
+        {
+            return resetCredits.SnakeCaseAvailableCount.Value;
+        }
+
+        if (resetCredits.Credits is null || resetCredits.Credits.Count == 0)
+        {
+            return resetCreditExpirations.Count > 0 ? resetCreditExpirations.Count : null;
+        }
+
+        var availableCredits = resetCredits.Credits.Count(static credit =>
+            string.IsNullOrWhiteSpace(credit.Status)
+            || string.Equals(credit.Status, "available", StringComparison.OrdinalIgnoreCase));
+
+        return availableCredits > 0 ? availableCredits : resetCreditExpirations.Count;
+    }
+
+    private static IReadOnlyList<DateTimeOffset> GetResetCreditExpirations(CodexRateLimitResetCredits? resetCredits)
+    {
+        if (resetCredits?.Credits is null || resetCredits.Credits.Count == 0)
+        {
+            return Array.Empty<DateTimeOffset>();
+        }
+
+        return resetCredits.Credits
+            .Select(GetResetCreditExpiration)
+            .Where(static value => value.HasValue)
+            .Select(static value => value!.Value)
+            .Distinct()
+            .OrderBy(static value => value)
+            .ToArray();
+    }
+
+    private static DateTimeOffset? GetResetCreditExpiration(CodexRateLimitResetCredit credit)
+    {
+        if (TryParseDateTimeOffset(credit.ExpiresAt, out var expiration))
+        {
+            return expiration;
+        }
+
+        if (credit.ExtensionData is null)
+        {
+            return null;
+        }
+
+        foreach (var key in new[] { "expires_at", "expiration", "expiresAt" })
+        {
+            if (!credit.ExtensionData.TryGetValue(key, out var value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind == System.Text.Json.JsonValueKind.String
+                && TryParseDateTimeOffset(value.GetString(), out expiration))
+            {
+                return expiration;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryParseDateTimeOffset(string? rawValue, out DateTimeOffset value)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            value = default;
+            return false;
+        }
+
+        return DateTimeOffset.TryParse(
+            rawValue,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+            out value);
+    }
+
+    private static string FormatAvailableFields(IDictionary<string, System.Text.Json.JsonElement>? extensionData)
+    {
+        if (extensionData is null || extensionData.Count == 0)
+        {
+            return "(none)";
+        }
+
+        return string.Join(", ", extensionData.Keys.OrderBy(static key => key, StringComparer.Ordinal));
+    }
 }

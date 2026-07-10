@@ -39,6 +39,9 @@ public partial class OverlayViewModel : ObservableObject
     private readonly SemaphoreSlim _settingsGate = new(1, 1);
     private HudSettings _settings = new();
     private UsageSnapshot? _latestSnapshot;
+    private IReadOnlyList<StyledDisplaySegment> _displaySegments = Array.Empty<StyledDisplaySegment>();
+    private IReadOnlyList<StyledDisplaySegment> _compactDisplaySegments = Array.Empty<StyledDisplaySegment>();
+    private IReadOnlyList<StyledDisplaySegment> _minimalDisplaySegments = Array.Empty<StyledDisplaySegment>();
     private bool _hasSnapshot;
     private bool _refreshLoopStarted;
 
@@ -112,8 +115,11 @@ public partial class OverlayViewModel : ObservableObject
     public bool IsFontSize24 => _settings.FontSize == 24;
     public bool HideWhenCodexUnavailable => _settings.HideWhenCodexUnavailable;
     public double DisplayFontSize => _settings.FontSize;
-    public int PositionOffsetX => _settings.PositionOffsetX;
-    public int PositionOffsetY => _settings.PositionOffsetY;
+    public bool IsHorizontalAlignmentLeft => _settings.HorizontalAlignment == HudHorizontalAlignment.Left;
+    public bool IsHorizontalAlignmentCenter => _settings.HorizontalAlignment == HudHorizontalAlignment.Center;
+    public bool IsHorizontalAlignmentRight => _settings.HorizontalAlignment == HudHorizontalAlignment.Right;
+    public int PositionOffsetX => GetCurrentPositionOffsetX(_settings);
+    public int PositionOffsetY => GetCurrentPositionOffsetY(_settings);
     public string PositionOffsetSummary => $"X {FormatSignedOffset(PositionOffsetX)} px  ·  Y {FormatSignedOffset(PositionOffsetY)} px";
     public bool IsColorModeDefault => _settings.ColorMode == HudColorMode.Default;
     public bool IsColorModeCustom => _settings.ColorMode == HudColorMode.Custom;
@@ -141,6 +147,8 @@ public partial class OverlayViewModel : ObservableObject
     public bool ShowLongRemainingPercent => _settings.ShowLongRemainingPercent;
     public bool ShowLongResetTime => _settings.ShowLongResetTime;
     public bool ShowResetCreditsLabel => _settings.ShowResetCreditsLabel;
+    public bool ShowResetCreditsNearestExpiration => _settings.ShowResetCreditsNearestExpiration;
+    public bool ShowResetCreditsAllExpirations => _settings.ShowResetCreditsAllExpirations;
     public bool ShowSeparatorDots => _settings.ShowSeparatorDots;
     public int ShortWindowOrder => _settings.ShortWindowOrder;
     public int LongWindowOrder => _settings.LongWindowOrder;
@@ -257,7 +265,7 @@ public partial class OverlayViewModel : ObservableObject
                 IsCodexWindowAvailable = false;
                 if (!_settings.HideWhenCodexUnavailable)
                 {
-                    DisplayText = "等待 Codex 窗口...";
+                    DisplayText = "等待 Codex/ChatGPT 窗口...";
                     CompactDisplayText = DisplayText;
                     MinimalDisplayText = DisplayText;
                 }
@@ -294,6 +302,10 @@ public partial class OverlayViewModel : ObservableObject
     {
         var fullSegments = new List<string>();
         var compactSegments = new List<string>();
+        var fullDisplaySegments = new List<StyledDisplaySegment>();
+        var compactDisplaySegments = new List<StyledDisplaySegment>();
+        var shortRemainingPercent = ToRemainingPercent(snapshot.ShortWindowUsedPercent);
+        var longRemainingPercent = ToRemainingPercent(snapshot.LongWindowUsedPercent);
 
         var shortWindowSegments = BuildUsageWindowSegments(
             snapshot.ShortWindowMinutes,
@@ -302,7 +314,8 @@ public partial class OverlayViewModel : ObservableObject
             FormatResetTime(snapshot.ShortWindowResetsAt),
             _settings.ShowShortWindowLabel,
             _settings.ShowShortRemainingPercent,
-            _settings.ShowShortResetTime);
+            _settings.ShowShortResetTime,
+            shortRemainingPercent);
 
         var longWindowSegments = BuildUsageWindowSegments(
             snapshot.LongWindowMinutes,
@@ -311,7 +324,8 @@ public partial class OverlayViewModel : ObservableObject
             FormatCompactResetDate(snapshot.LongWindowResetsAt),
             _settings.ShowLongWindowLabel,
             _settings.ShowLongRemainingPercent,
-            _settings.ShowLongResetTime);
+            _settings.ShowLongResetTime,
+            longRemainingPercent);
 
         foreach (var displayItem in GetOrderedDisplayItems())
         {
@@ -320,18 +334,24 @@ public partial class OverlayViewModel : ObservableObject
                 case HudDisplayItem.ShortWindow when _settings.ShowShortWindow && !string.IsNullOrWhiteSpace(shortWindowSegments.Full):
                     fullSegments.Add(shortWindowSegments.Full);
                     compactSegments.Add(shortWindowSegments.Compact);
+                    fullDisplaySegments.AddRange(shortWindowSegments.FullSegments);
+                    compactDisplaySegments.AddRange(shortWindowSegments.CompactSegments);
                     break;
                 case HudDisplayItem.LongWindow when _settings.ShowLongWindow && !string.IsNullOrWhiteSpace(longWindowSegments.Full):
                     fullSegments.Add(longWindowSegments.Full);
                     compactSegments.Add(longWindowSegments.Compact);
+                    fullDisplaySegments.AddRange(longWindowSegments.FullSegments);
+                    compactDisplaySegments.AddRange(longWindowSegments.CompactSegments);
                     break;
                 case HudDisplayItem.ResetCredits when _settings.ShowResetCredits:
-                    var resetCreditsFull = BuildResetCreditsSegment(snapshot.ResetCreditsAvailable, compact: false);
-                    var resetCreditsCompact = BuildResetCreditsSegment(snapshot.ResetCreditsAvailable, compact: true);
+                    var resetCreditsFull = BuildResetCreditsSegment(snapshot.ResetCreditsAvailable, snapshot.ResetCreditExpirations, compact: false);
+                    var resetCreditsCompact = BuildResetCreditsSegment(snapshot.ResetCreditsAvailable, snapshot.ResetCreditExpirations, compact: true);
                     if (!string.IsNullOrWhiteSpace(resetCreditsFull))
                     {
                         fullSegments.Add(resetCreditsFull);
                         compactSegments.Add(resetCreditsCompact);
+                        fullDisplaySegments.Add(CreateStyledSegment(resetCreditsFull));
+                        compactDisplaySegments.Add(CreateStyledSegment(resetCreditsCompact));
                     }
                     break;
             }
@@ -341,6 +361,9 @@ public partial class OverlayViewModel : ObservableObject
         DisplayText = fullSegments.Count > 0 ? string.Join(separator, fullSegments) : "HUD 已隐藏";
         CompactDisplayText = compactSegments.Count > 0 ? string.Join(separator, compactSegments) : DisplayText;
         MinimalDisplayText = BuildMinimalDisplayText(shortWindowSegments.Compact, compactSegments);
+        _displaySegments = JoinDisplaySegments(fullDisplaySegments, separator);
+        _compactDisplaySegments = JoinDisplaySegments(compactDisplaySegments, separator);
+        _minimalDisplaySegments = BuildMinimalDisplaySegments(shortWindowSegments.CompactSegments, _compactDisplaySegments);
 
         OnPropertyChanged(nameof(ShortWindowMenuText));
         OnPropertyChanged(nameof(LongWindowMenuText));
@@ -423,24 +446,39 @@ public partial class OverlayViewModel : ObservableObject
         UpdateSettingsAsync(_settings with { HideWhenCodexUnavailable = !_settings.HideWhenCodexUnavailable }, cancellationToken);
 
     [RelayCommand]
+    private Task SetHorizontalAlignmentLeftAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { HorizontalAlignment = HudHorizontalAlignment.Left }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetHorizontalAlignmentCenterAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { HorizontalAlignment = HudHorizontalAlignment.Center }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetHorizontalAlignmentRightAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { HorizontalAlignment = HudHorizontalAlignment.Right }, cancellationToken);
+
+    [RelayCommand]
     private Task NudgePositionLeftAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { PositionOffsetX = _settings.PositionOffsetX - PositionNudgeStepPx }, cancellationToken);
+        UpdateCurrentAlignmentOffsetsAsync(deltaX: -PositionNudgeStepPx, deltaY: 0, cancellationToken);
 
     [RelayCommand]
     private Task NudgePositionRightAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { PositionOffsetX = _settings.PositionOffsetX + PositionNudgeStepPx }, cancellationToken);
+        UpdateCurrentAlignmentOffsetsAsync(deltaX: PositionNudgeStepPx, deltaY: 0, cancellationToken);
 
     [RelayCommand]
     private Task NudgePositionUpAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { PositionOffsetY = _settings.PositionOffsetY - PositionNudgeStepPx }, cancellationToken);
+        UpdateCurrentAlignmentOffsetsAsync(deltaX: 0, deltaY: -PositionNudgeStepPx, cancellationToken);
 
     [RelayCommand]
     private Task NudgePositionDownAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { PositionOffsetY = _settings.PositionOffsetY + PositionNudgeStepPx }, cancellationToken);
+        UpdateCurrentAlignmentOffsetsAsync(deltaX: 0, deltaY: PositionNudgeStepPx, cancellationToken);
 
     [RelayCommand]
     private Task ResetPositionAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { PositionOffsetX = 0, PositionOffsetY = 0 }, cancellationToken);
+        ResetCurrentAlignmentOffsetsAsync(cancellationToken);
+
+    public Task NudgeCurrentPositionAsync(int deltaX, int deltaY, CancellationToken cancellationToken = default) =>
+        UpdateCurrentAlignmentOffsetsAsync(deltaX, deltaY, cancellationToken);
 
     [RelayCommand]
     private Task SetColorModeDefaultAsync(CancellationToken cancellationToken) =>
@@ -571,6 +609,30 @@ public partial class OverlayViewModel : ObservableObject
         UpdateSettingsAsync(_settings with { ShowResetCreditsLabel = !_settings.ShowResetCreditsLabel }, cancellationToken);
 
     [RelayCommand]
+    private Task ToggleShowResetCreditsNearestExpirationAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(
+            _settings.ShowResetCreditsNearestExpiration
+                ? _settings with { ShowResetCreditsNearestExpiration = false }
+                : _settings with
+                {
+                    ShowResetCreditsNearestExpiration = true,
+                    ShowResetCreditsAllExpirations = false
+                },
+            cancellationToken);
+
+    [RelayCommand]
+    private Task ToggleShowResetCreditsAllExpirationsAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(
+            _settings.ShowResetCreditsAllExpirations
+                ? _settings with { ShowResetCreditsAllExpirations = false }
+                : _settings with
+                {
+                    ShowResetCreditsAllExpirations = true,
+                    ShowResetCreditsNearestExpiration = false
+                },
+            cancellationToken);
+
+    [RelayCommand]
     private Task ToggleShowSeparatorDotsAsync(CancellationToken cancellationToken) =>
         UpdateSettingsAsync(_settings with { ShowSeparatorDots = !_settings.ShowSeparatorDots }, cancellationToken);
 
@@ -654,6 +716,9 @@ public partial class OverlayViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFontSize24));
         OnPropertyChanged(nameof(HideWhenCodexUnavailable));
         OnPropertyChanged(nameof(DisplayFontSize));
+        OnPropertyChanged(nameof(IsHorizontalAlignmentLeft));
+        OnPropertyChanged(nameof(IsHorizontalAlignmentCenter));
+        OnPropertyChanged(nameof(IsHorizontalAlignmentRight));
         OnPropertyChanged(nameof(PositionOffsetX));
         OnPropertyChanged(nameof(PositionOffsetY));
         OnPropertyChanged(nameof(PositionOffsetSummary));
@@ -678,6 +743,8 @@ public partial class OverlayViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowLongRemainingPercent));
         OnPropertyChanged(nameof(ShowLongResetTime));
         OnPropertyChanged(nameof(ShowResetCreditsLabel));
+        OnPropertyChanged(nameof(ShowResetCreditsNearestExpiration));
+        OnPropertyChanged(nameof(ShowResetCreditsAllExpirations));
         OnPropertyChanged(nameof(ShowSeparatorDots));
         OnPropertyChanged(nameof(ShortWindowOrder));
         OnPropertyChanged(nameof(LongWindowOrder));
@@ -723,6 +790,43 @@ public partial class OverlayViewModel : ObservableObject
         return candidates;
     }
 
+    public IReadOnlyList<IReadOnlyList<StyledDisplaySegment>> GetAutoDisplaySegmentCandidates()
+    {
+        var candidates = new List<IReadOnlyList<StyledDisplaySegment>>();
+        AddSegmentCandidate(candidates, _displaySegments);
+        AddSegmentCandidate(candidates, _compactDisplaySegments);
+        AddSegmentCandidate(candidates, _minimalDisplaySegments);
+        AddSegmentCandidate(candidates, Array.Empty<StyledDisplaySegment>());
+        return candidates;
+    }
+
+    public IReadOnlyList<StyledDisplaySegment> SelectDisplaySegments(double contentWidthPx)
+    {
+        if (!IsCodexWindowAvailable && _settings.HideWhenCodexUnavailable)
+        {
+            return Array.Empty<StyledDisplaySegment>();
+        }
+
+        var selectedSegments = _settings.DisplayMode switch
+        {
+            HudDisplayMode.Full => _displaySegments,
+            HudDisplayMode.Compact => _compactDisplaySegments,
+            _ when contentWidthPx >= 620d => _displaySegments,
+            _ when contentWidthPx >= 420d => _compactDisplaySegments,
+            _ => Array.Empty<StyledDisplaySegment>()
+        };
+
+        if (selectedSegments.Count > 0)
+        {
+            return selectedSegments;
+        }
+
+        var fallbackText = SelectDisplayText(contentWidthPx);
+        return string.IsNullOrWhiteSpace(fallbackText)
+            ? Array.Empty<StyledDisplaySegment>()
+            : new[] { CreateStyledSegment(fallbackText) };
+    }
+
     private void UpdateDisplayForegroundBrush()
     {
         DisplayForegroundBrush = ResolveDisplayForegroundBrush();
@@ -743,22 +847,7 @@ public partial class OverlayViewModel : ObservableObject
     private Brush ResolveDynamicForegroundBrush()
     {
         var remainingPercent = GetMostUrgentRemainingPercent();
-        if (!remainingPercent.HasValue)
-        {
-            return CreateBrushFromHex(_settings.DynamicHighRemainingColorHex, DefaultHighRemainingColorHex);
-        }
-
-        if (remainingPercent.Value < _settings.DynamicLowRemainingThresholdPercent)
-        {
-            return CreateBrushFromHex(_settings.DynamicLowRemainingColorHex, DefaultLowRemainingColorHex);
-        }
-
-        if (remainingPercent.Value < _settings.DynamicMediumRemainingThresholdPercent)
-        {
-            return CreateBrushFromHex(_settings.DynamicMediumRemainingColorHex, DefaultMediumRemainingColorHex);
-        }
-
-        return CreateBrushFromHex(_settings.DynamicHighRemainingColorHex, DefaultHighRemainingColorHex);
+        return ResolveBrushForRemainingPercent(remainingPercent);
     }
 
     private double? GetMostUrgentRemainingPercent()
@@ -788,14 +877,15 @@ public partial class OverlayViewModel : ObservableObject
         candidates.Add(Math.Clamp(100d - usedPercent.Value, 0d, 100d));
     }
 
-    private (string Full, string Compact) BuildUsageWindowSegments(
+    private UsageWindowSegments BuildUsageWindowSegments(
         int? minutes,
         double? usedPercent,
         string fullResetAt,
         string compactResetAt,
         bool showWindowLabel,
         bool showRemainingPercent,
-        bool showResetAt)
+        bool showResetAt,
+        double? remainingPercent)
     {
         var fullParts = new List<string>();
         var compactParts = new List<string>();
@@ -809,9 +899,9 @@ public partial class OverlayViewModel : ObservableObject
 
         if (showRemainingPercent)
         {
-            var remainingPercent = FormatRemainingPercent(usedPercent);
-            fullParts.Add($"剩余 {remainingPercent}");
-            compactParts.Add(remainingPercent);
+            var remainingPercentText = FormatRemainingPercent(usedPercent);
+            fullParts.Add($"剩余 {remainingPercentText}");
+            compactParts.Add(remainingPercentText);
         }
 
         if (showResetAt)
@@ -820,15 +910,75 @@ public partial class OverlayViewModel : ObservableObject
             compactParts.Add(compactResetAt);
         }
 
-        return (string.Join(" ", fullParts), string.Join(" ", compactParts));
+        var fullText = string.Join(" ", fullParts);
+        var compactText = string.Join(" ", compactParts);
+
+        return new UsageWindowSegments(
+            fullText,
+            compactText,
+            string.IsNullOrWhiteSpace(fullText)
+                ? Array.Empty<StyledDisplaySegment>()
+                : new[] { CreateStyledSegment(fullText, remainingPercent) },
+            string.IsNullOrWhiteSpace(compactText)
+                ? Array.Empty<StyledDisplaySegment>()
+                : new[] { CreateStyledSegment(compactText, remainingPercent) });
     }
 
-    private string BuildResetCreditsSegment(int? value, bool compact)
+    private string BuildResetCreditsSegment(int? value, IReadOnlyList<DateTimeOffset> expirations, bool compact)
     {
-        var credits = FormatCredits(value);
-        return _settings.ShowResetCreditsLabel
-            ? compact ? $"重置 {credits}" : $"重置次数 {credits}"
-            : credits;
+        var effectiveValue = value ?? (expirations.Count > 0 ? expirations.Count : null);
+        var prefix = _settings.ShowResetCreditsLabel
+            ? compact
+                ? $"重置{(effectiveValue.HasValue ? FormatCredits(effectiveValue) : "--")}次"
+                : $"重置次数 {(effectiveValue.HasValue ? $"{FormatCredits(effectiveValue)} 次" : "--")}"
+            : effectiveValue.HasValue
+                ? compact
+                    ? $"{FormatCredits(effectiveValue)}次"
+                    : $"{FormatCredits(effectiveValue)} 次"
+                : compact ? "重置--次" : "重置次数 --";
+
+        var expirationText = BuildResetCreditExpirationText(expirations, compact);
+        return string.IsNullOrWhiteSpace(expirationText)
+            ? prefix
+            : $"{prefix} {expirationText}";
+    }
+
+    private string BuildResetCreditExpirationText(IReadOnlyList<DateTimeOffset> expirations, bool compact)
+    {
+        if (expirations.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        if (_settings.ShowResetCreditsAllExpirations)
+        {
+            var formattedDates = expirations
+                .OrderBy(static date => date)
+                .Select(date => FormatResetCreditExpiration(date, compact))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            return compact
+                ? $"[{string.Join(", ", formattedDates)}]"
+                : $"到期 [{string.Join(", ", formattedDates)}]";
+        }
+
+        if (_settings.ShowResetCreditsNearestExpiration)
+        {
+            var nearestExpiration = expirations.Min();
+            var formattedDate = FormatResetCreditExpiration(nearestExpiration, compact);
+            return compact ? $"[{formattedDate}]" : $"最近 [{formattedDate}]";
+        }
+
+        return string.Empty;
+    }
+
+    private static string FormatResetCreditExpiration(DateTimeOffset expiration, bool compact)
+    {
+        var localExpiration = expiration.ToLocalTime();
+        return compact
+            ? $"{localExpiration.Month}/{localExpiration.Day}"
+            : $"{localExpiration.Month}/{localExpiration.Day}";
     }
 
     private string BuildMinimalDisplayText(string shortWindowCompact, IReadOnlyList<string> compactSegments)
@@ -848,8 +998,18 @@ public partial class OverlayViewModel : ObservableObject
             return "--";
         }
 
-        var remaining = Math.Clamp(100d - usedPercent.Value, 0d, 100d);
+        var remaining = ToRemainingPercent(usedPercent);
         return $"{remaining:0.#}%";
+    }
+
+    private static double? ToRemainingPercent(double? usedPercent)
+    {
+        if (!usedPercent.HasValue)
+        {
+            return null;
+        }
+
+        return Math.Clamp(100d - usedPercent.Value, 0d, 100d);
     }
 
     private static string FormatWindow(int? minutes) => minutes switch
@@ -917,14 +1077,15 @@ public partial class OverlayViewModel : ObservableObject
 
         var message = exception.Message;
         if (message.Contains("failed to fetch codex rate limits", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("failed to fetch chatgpt rate limits", StringComparison.OrdinalIgnoreCase)
             || message.Contains("error sending request for url", StringComparison.OrdinalIgnoreCase))
         {
-            return "用量读取失败: Codex 服务暂不可用";
+            return "用量读取失败: Codex/ChatGPT 服务暂不可用";
         }
 
         if (message.Contains("app-server", StringComparison.OrdinalIgnoreCase))
         {
-            return "用量读取失败: Codex 服务异常";
+            return "用量读取失败: Codex/ChatGPT 服务异常";
         }
 
         return "用量读取失败";
@@ -1030,15 +1191,63 @@ public partial class OverlayViewModel : ObservableObject
         }
     }
 
+    private static void AddSegmentCandidate(ICollection<IReadOnlyList<StyledDisplaySegment>> candidates, IReadOnlyList<StyledDisplaySegment> candidate)
+    {
+        if (!candidates.Any(existing => DisplaySegmentsEqual(existing, candidate)))
+        {
+            candidates.Add(candidate);
+        }
+    }
+
     private HudSettings NormalizeSettings(HudSettings settings)
     {
         var mediumThreshold = Math.Clamp(settings.DynamicMediumRemainingThresholdPercent, 1, 100);
         var lowThreshold = Math.Clamp(settings.DynamicLowRemainingThresholdPercent, 0, mediumThreshold - 1);
+        var normalizedHorizontalAlignment = Enum.IsDefined(settings.HorizontalAlignment)
+            ? settings.HorizontalAlignment
+            : HudHorizontalAlignment.Center;
+        var legacyOffsetX = Math.Clamp(settings.PositionOffsetX, -MaxPositionOffsetPx, MaxPositionOffsetPx);
+        var legacyOffsetY = Math.Clamp(settings.PositionOffsetY, -MaxPositionOffsetPx, MaxPositionOffsetPx);
+        var leftOffsetX = Math.Clamp(settings.LeftPositionOffsetX, -MaxPositionOffsetPx, MaxPositionOffsetPx);
+        var leftOffsetY = Math.Clamp(settings.LeftPositionOffsetY, -MaxPositionOffsetPx, MaxPositionOffsetPx);
+        var centerOffsetX = Math.Clamp(settings.CenterPositionOffsetX, -MaxPositionOffsetPx, MaxPositionOffsetPx);
+        var centerOffsetY = Math.Clamp(settings.CenterPositionOffsetY, -MaxPositionOffsetPx, MaxPositionOffsetPx);
+        var rightOffsetX = Math.Clamp(settings.RightPositionOffsetX, -MaxPositionOffsetPx, MaxPositionOffsetPx);
+        var rightOffsetY = Math.Clamp(settings.RightPositionOffsetY, -MaxPositionOffsetPx, MaxPositionOffsetPx);
+
+        if (leftOffsetX == 0 && leftOffsetY == 0
+            && centerOffsetX == 0 && centerOffsetY == 0
+            && rightOffsetX == 0 && rightOffsetY == 0
+            && (legacyOffsetX != 0 || legacyOffsetY != 0))
+        {
+            switch (normalizedHorizontalAlignment)
+            {
+                case HudHorizontalAlignment.Left:
+                    leftOffsetX = legacyOffsetX;
+                    leftOffsetY = legacyOffsetY;
+                    break;
+                case HudHorizontalAlignment.Right:
+                    rightOffsetX = legacyOffsetX;
+                    rightOffsetY = legacyOffsetY;
+                    break;
+                default:
+                    centerOffsetX = legacyOffsetX;
+                    centerOffsetY = legacyOffsetY;
+                    break;
+            }
+        }
 
         var normalized = settings with
         {
-            PositionOffsetX = Math.Clamp(settings.PositionOffsetX, -MaxPositionOffsetPx, MaxPositionOffsetPx),
-            PositionOffsetY = Math.Clamp(settings.PositionOffsetY, -MaxPositionOffsetPx, MaxPositionOffsetPx),
+            PositionOffsetX = 0,
+            PositionOffsetY = 0,
+            HorizontalAlignment = normalizedHorizontalAlignment,
+            LeftPositionOffsetX = leftOffsetX,
+            LeftPositionOffsetY = leftOffsetY,
+            CenterPositionOffsetX = centerOffsetX,
+            CenterPositionOffsetY = centerOffsetY,
+            RightPositionOffsetX = rightOffsetX,
+            RightPositionOffsetY = rightOffsetY,
             RefreshIntervalSeconds = settings.RefreshIntervalSeconds switch
             {
                 20 or 60 or 300 => settings.RefreshIntervalSeconds,
@@ -1090,6 +1299,11 @@ public partial class OverlayViewModel : ObservableObject
             && !normalized.ShowLongResetTime)
         {
             normalized = normalized with { ShowLongRemainingPercent = true };
+        }
+
+        if (normalized.ShowResetCreditsNearestExpiration && normalized.ShowResetCreditsAllExpirations)
+        {
+            normalized = normalized with { ShowResetCreditsNearestExpiration = false };
         }
 
         return normalized;
@@ -1278,6 +1492,149 @@ public partial class OverlayViewModel : ObservableObject
 
     private static string FormatSignedOffset(int value) => value > 0 ? $"+{value}" : value.ToString();
 
+    private Brush ResolveBrushForRemainingPercent(double? remainingPercent)
+    {
+        if (!remainingPercent.HasValue)
+        {
+            return CreateBrushFromHex(_settings.DynamicHighRemainingColorHex, DefaultHighRemainingColorHex);
+        }
+
+        if (remainingPercent.Value < _settings.DynamicLowRemainingThresholdPercent)
+        {
+            return CreateBrushFromHex(_settings.DynamicLowRemainingColorHex, DefaultLowRemainingColorHex);
+        }
+
+        if (remainingPercent.Value < _settings.DynamicMediumRemainingThresholdPercent)
+        {
+            return CreateBrushFromHex(_settings.DynamicMediumRemainingColorHex, DefaultMediumRemainingColorHex);
+        }
+
+        return CreateBrushFromHex(_settings.DynamicHighRemainingColorHex, DefaultHighRemainingColorHex);
+    }
+
+    private Brush ResolveBaseDisplayBrush()
+    {
+        Brush baseBrush = _settings.ColorMode switch
+        {
+            HudColorMode.Custom => CreateBrushFromHex(_settings.BaseForegroundColorHex, DefaultForegroundColorHex),
+            _ => SystemColors.GrayTextBrush
+        };
+
+        return ApplyOpacityToBrush(baseBrush, DisplayOpacity);
+    }
+
+    private StyledDisplaySegment CreateStyledSegment(string text, double? remainingPercent = null)
+    {
+        var brush = _settings.ColorMode == HudColorMode.DynamicByRemainingPercent && remainingPercent.HasValue
+            ? ApplyOpacityToBrush(ResolveBrushForRemainingPercent(remainingPercent), DisplayOpacity)
+            : ResolveBaseDisplayBrush();
+        return new StyledDisplaySegment(text, brush);
+    }
+
+    private IReadOnlyList<StyledDisplaySegment> JoinDisplaySegments(IReadOnlyList<StyledDisplaySegment> sourceSegments, string separator)
+    {
+        if (sourceSegments.Count == 0)
+        {
+            return Array.Empty<StyledDisplaySegment>();
+        }
+
+        var joined = new List<StyledDisplaySegment>();
+        for (var index = 0; index < sourceSegments.Count; index++)
+        {
+            if (index > 0)
+            {
+                joined.Add(CreateStyledSegment(separator));
+            }
+
+            joined.Add(sourceSegments[index]);
+        }
+
+        return joined;
+    }
+
+    private IReadOnlyList<StyledDisplaySegment> BuildMinimalDisplaySegments(
+        IReadOnlyList<StyledDisplaySegment> shortWindowCompactSegments,
+        IReadOnlyList<StyledDisplaySegment> compactSegments)
+    {
+        if (_settings.ShowShortWindow && shortWindowCompactSegments.Count > 0)
+        {
+            return shortWindowCompactSegments;
+        }
+
+        return compactSegments.Count > 0
+            ? new[] { compactSegments.First(static segment => !string.IsNullOrWhiteSpace(segment.Text)) }
+            : Array.Empty<StyledDisplaySegment>();
+    }
+
+    private static bool DisplaySegmentsEqual(IReadOnlyList<StyledDisplaySegment> left, IReadOnlyList<StyledDisplaySegment> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Count; index++)
+        {
+            if (!string.Equals(left[index].Text, right[index].Text, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private Task UpdateCurrentAlignmentOffsetsAsync(int deltaX, int deltaY, CancellationToken cancellationToken)
+    {
+        var currentOffsetX = GetCurrentPositionOffsetX(_settings);
+        var currentOffsetY = GetCurrentPositionOffsetY(_settings);
+        return SetCurrentAlignmentOffsetsAsync(
+            Math.Clamp(currentOffsetX + deltaX, -MaxPositionOffsetPx, MaxPositionOffsetPx),
+            Math.Clamp(currentOffsetY + deltaY, -MaxPositionOffsetPx, MaxPositionOffsetPx),
+            cancellationToken);
+    }
+
+    private Task ResetCurrentAlignmentOffsetsAsync(CancellationToken cancellationToken) =>
+        SetCurrentAlignmentOffsetsAsync(0, 0, cancellationToken);
+
+    private Task SetCurrentAlignmentOffsetsAsync(int offsetX, int offsetY, CancellationToken cancellationToken)
+    {
+        var updatedSettings = _settings.HorizontalAlignment switch
+        {
+            HudHorizontalAlignment.Left => _settings with
+            {
+                LeftPositionOffsetX = offsetX,
+                LeftPositionOffsetY = offsetY
+            },
+            HudHorizontalAlignment.Right => _settings with
+            {
+                RightPositionOffsetX = offsetX,
+                RightPositionOffsetY = offsetY
+            },
+            _ => _settings with
+            {
+                CenterPositionOffsetX = offsetX,
+                CenterPositionOffsetY = offsetY
+            }
+        };
+
+        return UpdateSettingsAsync(updatedSettings, cancellationToken);
+    }
+
+    private static int GetCurrentPositionOffsetX(HudSettings settings) => settings.HorizontalAlignment switch
+    {
+        HudHorizontalAlignment.Left => settings.LeftPositionOffsetX,
+        HudHorizontalAlignment.Right => settings.RightPositionOffsetX,
+        _ => settings.CenterPositionOffsetX
+    };
+
+    private static int GetCurrentPositionOffsetY(HudSettings settings) => settings.HorizontalAlignment switch
+    {
+        HudHorizontalAlignment.Left => settings.LeftPositionOffsetY,
+        HudHorizontalAlignment.Right => settings.RightPositionOffsetY,
+        _ => settings.CenterPositionOffsetY
+    };
+
     private int GetEnabledDisplayItemCount()
     {
         var count = 0;
@@ -1294,7 +1651,7 @@ public partial class OverlayViewModel : ObservableObject
             return;
         }
 
-        if (_windowTracker.GetTrackedWindow() is not null || _codexDesktopLauncher.IsCodexProcessRunning())
+        if (_windowTracker.GetTrackedWindow() is not null)
         {
             return;
         }
@@ -1305,7 +1662,7 @@ public partial class OverlayViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Failed to launch Codex desktop during HUD startup.");
+            _logger.LogWarning(exception, "Failed to launch Codex/ChatGPT desktop during HUD startup.");
         }
     }
 
@@ -1315,4 +1672,12 @@ public partial class OverlayViewModel : ObservableObject
         ICommand MoveDownCommand,
         bool CanMoveUp,
         bool CanMoveDown);
+
+    public sealed record StyledDisplaySegment(string Text, Brush Foreground);
+
+    private sealed record UsageWindowSegments(
+        string Full,
+        string Compact,
+        IReadOnlyList<StyledDisplaySegment> FullSegments,
+        IReadOnlyList<StyledDisplaySegment> CompactSegments);
 }

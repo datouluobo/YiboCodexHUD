@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using YiboCodexHUD.Infrastructure.Options;
+using YiboCodexHUD.Core.Utilities;
 
 namespace YiboCodexHUD.Infrastructure.Services;
 
@@ -26,7 +27,7 @@ public sealed class CodexDesktopLauncher
             {
                 try
                 {
-                    if (process.ProcessName.Contains("codex", StringComparison.OrdinalIgnoreCase))
+                    if (CodexDesktopIdentity.MatchesProcessName(process.ProcessName))
                     {
                         return true;
                     }
@@ -44,7 +45,7 @@ public sealed class CodexDesktopLauncher
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Failed to probe existing Codex processes.");
+            _logger.LogWarning(exception, "Failed to probe existing Codex/ChatGPT processes.");
             return false;
         }
     }
@@ -53,33 +54,76 @@ public sealed class CodexDesktopLauncher
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (IsCodexProcessRunning())
+        Exception? lastException = null;
+
+        foreach (var desktopAppUserModelId in CodexDesktopIdentity.GetDesktopAppUserModelIds())
         {
-            _logger.LogInformation("Skipping Codex desktop launch because an existing Codex process is already running.");
-            return Task.FromResult(false);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"shell:AppsFolder\\{desktopAppUserModelId}",
+                UseShellExecute = true
+            };
+
+            _logger.LogInformation(
+                "Launching Codex/ChatGPT desktop via app activation. AppUserModelId: {AppUserModelId}",
+                desktopAppUserModelId);
+
+            try
+            {
+                var process = Process.Start(startInfo);
+                if (process is null)
+                {
+                    continue;
+                }
+
+                process.Dispose();
+                return Task.FromResult(true);
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+                _logger.LogWarning(exception, "Failed to launch Codex/ChatGPT desktop using app activation {AppUserModelId}.", desktopAppUserModelId);
+            }
         }
 
-        var executablePath = Environment.ExpandEnvironmentVariables(_options.ExecutablePath);
-        var startInfo = new ProcessStartInfo
+        var launchCandidates = CodexDesktopIdentity.GetLaunchCandidates(_options.ExecutablePath);
+        foreach (var executablePath in launchCandidates)
         {
-            FileName = executablePath,
-            Arguments = _options.LaunchArguments,
-            UseShellExecute = true
-        };
+            cancellationToken.ThrowIfCancellationRequested();
 
-        _logger.LogInformation(
-            "Launching Codex desktop. Executable: {ExecutablePath}, Arguments: {Arguments}",
-            executablePath,
-            _options.LaunchArguments);
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = executablePath,
+                Arguments = _options.LaunchArguments,
+                UseShellExecute = true
+            };
 
-        var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            throw new InvalidOperationException("Failed to launch Codex desktop.");
+            _logger.LogInformation(
+                "Launching Codex/ChatGPT desktop via executable fallback. Executable: {ExecutablePath}, Arguments: {Arguments}",
+                executablePath,
+                _options.LaunchArguments);
+
+            try
+            {
+                var process = Process.Start(startInfo);
+                if (process is null)
+                {
+                    continue;
+                }
+
+                process.Dispose();
+                return Task.FromResult(true);
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+                _logger.LogWarning(exception, "Failed to launch Codex/ChatGPT desktop using executable fallback {ExecutablePath}.", executablePath);
+            }
         }
 
-        process.Dispose();
-
-        return Task.FromResult(true);
+        throw new InvalidOperationException("Failed to launch Codex/ChatGPT desktop.", lastException);
     }
 }

@@ -64,7 +64,7 @@ public sealed class CodexProtocolClient : IDisposable
                 _initializationTimeout,
                 cancellationToken);
 
-            _logger.LogInformation("Codex app-server initialized: {InitializeResult}", initializeResult.ToString());
+            _logger.LogInformation("Codex/ChatGPT app-server initialized: {InitializeResult}", initializeResult.ToString());
 
             await SendNotificationInternalAsync("initialized", new { }, cancellationToken);
             _initialized = true;
@@ -151,7 +151,7 @@ public sealed class CodexProtocolClient : IDisposable
 
             if (response.Error is not null)
             {
-                throw new InvalidOperationException($"Codex app-server error {response.Error.Code}: {response.Error.Message}");
+                throw new InvalidOperationException($"Codex/ChatGPT app-server error {response.Error.Code}: {response.Error.Message}");
             }
 
             if (response.Result is null)
@@ -205,7 +205,7 @@ public sealed class CodexProtocolClient : IDisposable
     {
         if (_writer is null || _reader is null)
         {
-            throw new InvalidOperationException("Codex app-server transport is not ready.");
+            throw new InvalidOperationException("Codex/ChatGPT app-server transport is not ready.");
         }
     }
 
@@ -219,13 +219,13 @@ public sealed class CodexProtocolClient : IDisposable
                 return;
             }
 
-            _logger.LogDebug("Codex app-server stderr: {Line}", line);
+            _logger.LogDebug("Codex/ChatGPT app-server stderr: {Line}", line);
         }
     }
 
     private void ResetTransport()
     {
-        _logger.LogWarning("Resetting Codex app-server transport after a failed request.");
+        _logger.LogWarning("Resetting Codex/ChatGPT app-server transport after a failed request.");
 
         _writer = null;
         _reader = null;

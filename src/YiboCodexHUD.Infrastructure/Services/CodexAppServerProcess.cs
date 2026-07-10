@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using YiboCodexHUD.Infrastructure.Options;
+using YiboCodexHUD.Core.Utilities;
 
 namespace YiboCodexHUD.Infrastructure.Services;
 
@@ -27,7 +28,11 @@ public sealed class CodexAppServerProcess
             return Task.FromResult(_process);
         }
 
-        var executablePath = Environment.ExpandEnvironmentVariables(_options.ExecutablePath);
+        if (!CodexDesktopIdentity.TryResolveExecutablePath(_options.ExecutablePath, out var executablePath))
+        {
+            throw new FileNotFoundException("Unable to locate a Codex/ChatGPT app-server executable.");
+        }
+
         var startInfo = new ProcessStartInfo
         {
             FileName = executablePath,
@@ -43,12 +48,12 @@ public sealed class CodexAppServerProcess
         };
 
         _logger.LogInformation(
-            "Starting Codex app-server. Executable: {ExecutablePath}, Arguments: {Arguments}",
+            "Starting Codex/ChatGPT app-server. Executable: {ExecutablePath}, Arguments: {Arguments}",
             executablePath,
             _options.Arguments);
 
         _process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start Codex app-server process.");
+            ?? throw new InvalidOperationException("Failed to start Codex/ChatGPT app-server process.");
 
         return Task.FromResult(_process);
     }
@@ -70,7 +75,7 @@ public sealed class CodexAppServerProcess
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Failed to stop Codex app-server process cleanly.");
+            _logger.LogWarning(exception, "Failed to stop Codex/ChatGPT app-server process cleanly.");
         }
         finally
         {

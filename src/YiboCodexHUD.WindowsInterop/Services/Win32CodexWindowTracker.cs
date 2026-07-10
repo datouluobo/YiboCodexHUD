@@ -3,11 +3,14 @@ using System.Runtime.InteropServices;
 using System.Text;
 using YiboCodexHUD.Core.Abstractions;
 using YiboCodexHUD.Core.Models;
+using YiboCodexHUD.Core.Utilities;
 
 namespace YiboCodexHUD.WindowsInterop.Services;
 
 public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
 {
+    private const int GwlStyle = -16;
+    private const int GwlExStyle = -20;
     private const int WmNcHitTest = 0x0084;
     private const int DwmwaExtendedFrameBounds = 9;
     private const int DwmwaCloaked = 14;
@@ -18,6 +21,15 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
     private const uint GwOwner = 4;
     private const int MinimumTrackedWindowWidth = 320;
     private const int MinimumTrackedWindowHeight = 180;
+    private const nuint WsCaption = 0x00C00000;
+    private const nuint WsSysMenu = 0x00080000;
+    private const nuint WsMinimizeBox = 0x00020000;
+    private const nuint WsMaximizeBox = 0x00010000;
+    private const nuint WsExAppWindow = 0x00040000;
+    private const nuint WsExToolWindow = 0x00000080;
+    private const nuint WsExNoActivate = 0x08000000;
+    private const nuint WsExTransparent = 0x00000020;
+    private const nuint WsExLayered = 0x00080000;
     private static readonly int CurrentProcessId = Environment.ProcessId;
 
     public TrackedWindow? GetTrackedWindow()
@@ -81,13 +93,16 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
         var titleBuilder = new StringBuilder(Math.Max(titleLength, 0) + 1);
         _ = GetWindowText(windowHandle, titleBuilder, titleBuilder.Capacity);
         var title = titleBuilder.ToString().Trim();
+        var className = GetWindowClassName(windowHandle);
+        var style = GetWindowStyle(windowHandle, GwlStyle);
+        var exStyle = GetWindowStyle(windowHandle, GwlExStyle);
 
         if (processName.Contains("YiboCodexHUD", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        var processLooksLikeCodex = processName.Contains("codex", StringComparison.OrdinalIgnoreCase);
+        var processLooksLikeCodex = CodexDesktopIdentity.MatchesProcessName(processName);
 
         if (!processLooksLikeCodex)
         {
@@ -125,15 +140,34 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
             return null;
         }
 
+        var hasMeasuredTitleBarSafeBounds = titleBarSafeBounds.Width > 0 && titleBarSafeBounds.Height > 0;
+        var looksLikePrimaryWindow = LooksLikePrimaryWindow(
+            title,
+            className,
+            width,
+            height,
+            clientBounds,
+            hasMeasuredTitleBarSafeBounds,
+            style,
+            exStyle);
+        if (!looksLikePrimaryWindow)
+        {
+            return null;
+        }
+
         var isForeground = windowHandle == foregroundWindow;
         var isTopVisible = IsWindowTopVisible(windowHandle, bounds, clientBounds);
         candidateScore = CalculateCandidateScore(
-            processLooksLikeCodex,
+            title,
+            className,
             isForeground,
             string.IsNullOrWhiteSpace(title),
+            hasMeasuredTitleBarSafeBounds,
             width,
             height,
-            clientBounds);
+            clientBounds,
+            style,
+            exStyle);
 
         return new TrackedWindow(
             windowHandle,
@@ -273,6 +307,23 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
         return unchecked((short)SendMessage(windowHandle, WmNcHitTest, IntPtr.Zero, lParam));
     }
 
+    private static string GetWindowClassName(IntPtr windowHandle)
+    {
+        var classNameBuilder = new StringBuilder(256);
+        _ = GetClassName(windowHandle, classNameBuilder, classNameBuilder.Capacity);
+        return classNameBuilder.ToString().Trim();
+    }
+
+    private static nuint GetWindowStyle(IntPtr windowHandle, int index)
+    {
+        if (IntPtr.Size == 8)
+        {
+            return unchecked((nuint)GetWindowLongPtr(windowHandle, index).ToInt64());
+        }
+
+        return unchecked((nuint)(uint)GetWindowLong(windowHandle, index));
+    }
+
     private static bool TryGetWindowBounds(IntPtr windowHandle, out RECT rect)
     {
         if (DwmGetWindowAttribute(windowHandle, DwmwaExtendedFrameBounds, out rect, Marshal.SizeOf<RECT>()) == 0)
@@ -348,24 +399,134 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
 
     private static bool IsRootOwner(IntPtr windowHandle) => GetAncestor(windowHandle, GaRootOwner) == windowHandle;
 
-    private static int CalculateCandidateScore(
-        bool processLooksLikeCodex,
-        bool isForeground,
-        bool isTitleMissing,
+    private static bool LooksLikePrimaryWindow(
+        string title,
+        string className,
         int width,
         int height,
-        WindowBounds clientBounds)
+        WindowBounds clientBounds,
+        bool hasMeasuredTitleBarSafeBounds,
+        nuint style,
+        nuint exStyle)
+    {
+        var hasCaption = (style & WsCaption) == WsCaption;
+        var hasSystemMenu = (style & WsSysMenu) != 0;
+        var hasMinimizeOrMaximizeButton = (style & (WsMinimizeBox | WsMaximizeBox)) != 0;
+        var isAppWindow = (exStyle & WsExAppWindow) != 0;
+        var isToolWindow = (exStyle & WsExToolWindow) != 0;
+        var isNoActivate = (exStyle & WsExNoActivate) != 0;
+        var isTransparent = (exStyle & WsExTransparent) != 0;
+        var isLayered = (exStyle & WsExLayered) != 0;
+        var classLooksLikeDesktopShell =
+            className.Contains("Chrome_WidgetWin", StringComparison.OrdinalIgnoreCase)
+            || className.Contains("WinUIDesktopWin32WindowClass", StringComparison.OrdinalIgnoreCase)
+            || className.Contains("ApplicationFrameWindow", StringComparison.OrdinalIgnoreCase);
+        var titleLooksLikeCodex =
+            title.Contains("Codex", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("ChatGPT", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("OpenAI", StringComparison.OrdinalIgnoreCase);
+
+        var clientArea = Math.Max(1, clientBounds.Width * clientBounds.Height);
+        var windowArea = Math.Max(1, width * height);
+        var clientFillRatio = clientArea / (double)windowArea;
+
+        if (isToolWindow || isNoActivate)
+        {
+            return false;
+        }
+
+        if (isTransparent && isLayered && !classLooksLikeDesktopShell)
+        {
+            return false;
+        }
+
+        if (!hasCaption && !hasMeasuredTitleBarSafeBounds && !classLooksLikeDesktopShell)
+        {
+            return false;
+        }
+
+        if (!hasSystemMenu && !hasMinimizeOrMaximizeButton && !isAppWindow && !classLooksLikeDesktopShell)
+        {
+            return false;
+        }
+
+        if (clientFillRatio < 0.55 && !classLooksLikeDesktopShell)
+        {
+            return false;
+        }
+
+        if (width < 520 && height < 420 && !titleLooksLikeCodex && !classLooksLikeDesktopShell)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int CalculateCandidateScore(
+        string title,
+        string className,
+        bool isForeground,
+        bool isTitleMissing,
+        bool hasMeasuredTitleBarSafeBounds,
+        int width,
+        int height,
+        WindowBounds clientBounds,
+        nuint style,
+        nuint exStyle)
     {
         var score = 0;
+        var hasCaption = (style & WsCaption) == WsCaption;
+        var hasSystemMenu = (style & WsSysMenu) != 0;
+        var hasMinimizeOrMaximizeButton = (style & (WsMinimizeBox | WsMaximizeBox)) != 0;
+        var isAppWindow = (exStyle & WsExAppWindow) != 0;
+        var classLooksLikeDesktopShell =
+            className.Contains("Chrome_WidgetWin", StringComparison.OrdinalIgnoreCase)
+            || className.Contains("WinUIDesktopWin32WindowClass", StringComparison.OrdinalIgnoreCase)
+            || className.Contains("ApplicationFrameWindow", StringComparison.OrdinalIgnoreCase);
+        var titleLooksLikeCodex =
+            title.Contains("Codex", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("ChatGPT", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("OpenAI", StringComparison.OrdinalIgnoreCase);
 
         if (isForeground)
         {
-            score += 10000;
+            score += 600;
         }
 
-        if (processLooksLikeCodex)
+        if (hasCaption)
         {
-            score += 3000;
+            score += 2400;
+        }
+
+        if (hasSystemMenu)
+        {
+            score += 900;
+        }
+
+        if (hasMinimizeOrMaximizeButton)
+        {
+            score += 900;
+        }
+
+        if (isAppWindow)
+        {
+            score += 1000;
+        }
+
+        if (classLooksLikeDesktopShell)
+        {
+            score += 2200;
+        }
+
+        if (hasMeasuredTitleBarSafeBounds)
+        {
+            score += 1500;
+        }
+
+        if (titleLooksLikeCodex)
+        {
+            score += 800;
         }
 
         if (!isTitleMissing)
@@ -395,8 +556,17 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

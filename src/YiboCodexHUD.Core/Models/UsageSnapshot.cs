@@ -20,5 +20,7 @@ public sealed record UsageSnapshot
 
     public int? ResetCreditsAvailable { get; init; }
 
+    public IReadOnlyList<DateTimeOffset> ResetCreditExpirations { get; init; } = Array.Empty<DateTimeOffset>();
+
     public DateTimeOffset FetchedAt { get; init; }
 }

@@ -9,7 +9,7 @@
 - UI 框架：`WPF`
 - 架构模式：`MVVM`
 - 系统交互：`Win32 P/Invoke`
-- 数据协议接入：`codex.exe app-server --stdio`
+- 数据协议接入：`codex.exe app-server --stdio` / `chatgpt.exe app-server --stdio`
 - 序列化：`System.Text.Json`
 - 日志：`Microsoft.Extensions.Logging`
 - 配置：`appsettings.json` + 本地用户配置文件
@@ -28,7 +28,7 @@
 - 跟随另一个原生桌面窗口
 - 在标题栏附近稳定显示
 - 支持透明、置顶、点击穿透
-- 对 Codex 更新尽量不敏感
+- 对 Codex/ChatGPT 更新尽量不敏感
 - 以最少依赖读取结构化用量数据
 
 在这些约束下，`C# + WPF + Win32 P/Invoke` 是目前风险最低的一套。
@@ -124,7 +124,7 @@ Electron 的问题很直接：
 
 职责：
 
-- 查找 Codex 主窗口
+- 查找 Codex/ChatGPT 主窗口
 - 读取窗口矩形
 - 监听前台窗口变化
 - 设置点击穿透和扩展样式
@@ -201,7 +201,7 @@ Electron 的问题很直接：
 - 读取 `account/read`
 - 读取 `account/rateLimits/read`
 - 转成内部统一模型
-- 在 Codex 标题栏附近显示一行文本
+- 在 Codex/ChatGPT 标题栏附近显示一行文本
 - 支持自动刷新
 - 支持异常状态提示
 - 支持托盘退出和手动刷新
@@ -230,4 +230,4 @@ Electron 的问题很直接：
 - 开发速度
 - 系统集成能力
 - 维护成本
-- 对 Codex 更新的抗脆弱性
+- 对 Codex/ChatGPT 更新的抗脆弱性

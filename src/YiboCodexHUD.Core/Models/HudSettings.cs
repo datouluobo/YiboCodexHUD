@@ -20,9 +20,24 @@ public sealed record HudSettings
 
     public bool HideWhenCodexUnavailable { get; init; }
 
+    // Legacy shared offsets kept for backward-compatible imports.
     public int PositionOffsetX { get; init; }
 
     public int PositionOffsetY { get; init; }
+
+    public HudHorizontalAlignment HorizontalAlignment { get; init; } = HudHorizontalAlignment.Center;
+
+    public int LeftPositionOffsetX { get; init; }
+
+    public int LeftPositionOffsetY { get; init; }
+
+    public int CenterPositionOffsetX { get; init; }
+
+    public int CenterPositionOffsetY { get; init; }
+
+    public int RightPositionOffsetX { get; init; }
+
+    public int RightPositionOffsetY { get; init; }
 
     public HudColorMode ColorMode { get; init; } = HudColorMode.Default;
 
@@ -53,6 +68,10 @@ public sealed record HudSettings
     public bool ShowLongResetTime { get; init; } = true;
 
     public bool ShowResetCreditsLabel { get; init; } = true;
+
+    public bool ShowResetCreditsNearestExpiration { get; init; }
+
+    public bool ShowResetCreditsAllExpirations { get; init; }
 
     public bool ShowSeparatorDots { get; init; } = true;
 

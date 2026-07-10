@@ -2,9 +2,9 @@
 
 ## 项目目标
 
-`YiboCodexHUD` 是一个面向 Codex 桌面端的非侵入式辅助工具。
+`YiboCodexHUD` 是一个面向 Codex/ChatGPT 桌面端的非侵入式辅助工具。
 
-目标是把 Codex 账户的剩余用量信息显示在主窗口标题栏附近，减少用户进入多级菜单查看的成本。
+目标是把 Codex/ChatGPT 账户的剩余用量信息显示在主窗口标题栏附近，减少用户进入多级菜单查看的成本。
 
 目标显示内容：
 
@@ -16,17 +16,17 @@
 
 ## 项目约束
 
-- 不修改 Codex 安装包
+- 不修改 Codex/ChatGPT 安装包
 - 不依赖前端 UI 结构
-- 尽量降低对 Codex 高频更新的敏感度
+- 尽量降低对 Codex/ChatGPT 高频更新的敏感度
 - UI 只做外部悬浮层
 
 ## 已确认结论
 
 ### 数据入口
 
-- Codex 桌面端存在独立 `app-server`
-- 主数据入口使用 `codex.exe app-server --stdio`
+- Codex/ChatGPT 桌面端存在独立 `app-server`
+- 主数据入口使用 `codex.exe app-server --stdio` / `chatgpt.exe app-server --stdio`
 - 已验证可调用：
   - `initialize`
   - `account/read`
@@ -65,7 +65,7 @@
 
 - 主方案：外部悬浮层 + `app-server` 结构化数据读取
 - `OCR` 和菜单自动化只作为最后兜底
-- 不采用修改 Codex 客户端、前端注入、DOM 依赖或 HTTP 逆向作为主方案
+- 不采用修改 Codex/ChatGPT 客户端、前端注入、DOM 依赖或 HTTP 逆向作为主方案
 
 ## 技术栈结论
 
@@ -79,7 +79,7 @@
 
 数据通信：
 
-- `codex.exe app-server --stdio`
+- `codex.exe app-server --stdio` / `chatgpt.exe app-server --stdio`
 
 技术栈详细说明见：
 
@@ -91,7 +91,7 @@
 
 职责：
 
-- 启动并维护 `codex.exe app-server --stdio`
+- 启动并维护 `codex.exe app-server --stdio` / `chatgpt.exe app-server --stdio`
 - 完成 `initialize`
 - 调用 `account/read`
 - 调用 `account/rateLimits/read`
@@ -119,11 +119,11 @@ type UsageSnapshot = {
 
 职责：
 
-- 找到 Codex 主窗口
+- 找到 Codex/ChatGPT 主窗口
 - 监听窗口位置、尺寸、最小化状态
 - 在标题栏目标区域绘制轻量悬浮层
 - 默认点击穿透
-- 尽量不影响 Codex 原交互
+- 尽量不影响 Codex/ChatGPT 原交互
 
 ### 调度层
 

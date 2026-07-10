@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Globalization;
+using System.Windows.Documents;
 using YiboCodexHUD.Core.Abstractions;
 using YiboCodexHUD.Core.Models;
 using YiboCodexHUD.Desktop.ViewModels;
@@ -184,7 +185,7 @@ public partial class OverlayWindow : Window
 
         if (DisplayTextBlock is TextBlock textBlock)
         {
-            textBlock.Text = SelectDisplayText(viewModel, textBlock, trackedWindow, contentWidthPx);
+            ApplyDisplaySegments(textBlock, SelectDisplaySegments(viewModel, textBlock, trackedWindow, contentWidthPx));
             textBlock.MaxWidth = PixelsToDipX(Math.Max(120d, contentWidthPx), trackedWindow.Handle);
         }
 
@@ -195,19 +196,40 @@ public partial class OverlayWindow : Window
         var titleTopPx = anchorBounds.Top + Math.Max(6d, ((titleBarHeightPx - overlayHeightPx) / 2.0));
         var safeLeftPx = safeBounds.Left;
         var safeRightPx = safeBounds.Left + safeBounds.Width;
+        var conservativeLeftDockPx = GetConservativeLeftDockPx(anchorBounds, trackedWindow.ClientBounds);
         var safeCenterXPx = safeLeftPx + ((safeRightPx - safeLeftPx) / 2.0);
         var overlayWidthPx = DipToPixelsX(ActualWidth, trackedWindow.Handle);
-        var desiredLeftPx = safeCenterXPx - (overlayWidthPx / 2.0);
-        var minLeftPx = safeLeftPx;
+        var minLeftPx = Math.Max(safeLeftPx, conservativeLeftDockPx);
         var maxLeftPx = Math.Max(safeLeftPx, safeRightPx - overlayWidthPx);
         var offsetXPx = viewModel?.PositionOffsetX ?? 0d;
         var offsetYPx = viewModel?.PositionOffsetY ?? 0d;
+        var desiredLeftPx = viewModel switch
+        {
+            { IsHorizontalAlignmentLeft: true } => minLeftPx,
+            { IsHorizontalAlignmentRight: true } => safeRightPx - overlayWidthPx,
+            _ => safeCenterXPx - (overlayWidthPx / 2.0)
+        };
 
         Left = PixelsToDipX(Math.Max(minLeftPx, Math.Min(desiredLeftPx + offsetXPx, maxLeftPx)), trackedWindow.Handle);
         Top = PixelsToDipY(titleTopPx + offsetYPx, trackedWindow.Handle);
     }
 
-    private string SelectDisplayText(
+    private static double GetConservativeLeftDockPx(WindowBounds anchorBounds, WindowBounds clientBounds)
+    {
+        var width = Math.Max(1, anchorBounds.Width);
+        var fallbackInset = width switch
+        {
+            < 900 => 340d,
+            < 1100 => 370d,
+            < 1400 => 410d,
+            _ => 440d
+        };
+
+        // Keep the left-docked HUD behind the app's menu/help cluster instead of hugging the raw caption edge.
+        return Math.Max(anchorBounds.Left + fallbackInset, clientBounds.Left + 12d);
+    }
+
+    private IReadOnlyList<OverlayViewModel.StyledDisplaySegment> SelectDisplaySegments(
         OverlayViewModel? viewModel,
         TextBlock textBlock,
         TrackedWindow trackedWindow,
@@ -215,23 +237,38 @@ public partial class OverlayWindow : Window
     {
         if (viewModel is null)
         {
-            return string.Empty;
+            return Array.Empty<OverlayViewModel.StyledDisplaySegment>();
         }
 
         if (viewModel.IsDisplayModeAuto)
         {
-            foreach (var candidate in viewModel.GetAutoDisplayCandidates())
+            foreach (var candidate in viewModel.GetAutoDisplaySegmentCandidates())
             {
-                if (MeasureTextWidthPx(candidate, textBlock, trackedWindow.Handle) <= contentWidthPx)
+                if (MeasureTextWidthPx(JoinSegmentText(candidate), textBlock, trackedWindow.Handle) <= contentWidthPx)
                 {
                     return candidate;
                 }
             }
 
-            return string.Empty;
+            return Array.Empty<OverlayViewModel.StyledDisplaySegment>();
         }
 
-        return viewModel.SelectDisplayText(contentWidthPx);
+        return viewModel.SelectDisplaySegments(contentWidthPx);
+    }
+
+    private static string JoinSegmentText(IReadOnlyList<OverlayViewModel.StyledDisplaySegment> segments) =>
+        string.Concat(segments.Select(static segment => segment.Text));
+
+    private static void ApplyDisplaySegments(TextBlock textBlock, IReadOnlyList<OverlayViewModel.StyledDisplaySegment> segments)
+    {
+        textBlock.Inlines.Clear();
+        foreach (var segment in segments)
+        {
+            textBlock.Inlines.Add(new Run(segment.Text)
+            {
+                Foreground = segment.Foreground
+            });
+        }
     }
 
     private void HideOverlay()

@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace YiboCodexHUD.Infrastructure.Models;
 
 internal sealed class CodexRateLimitSnapshot
@@ -13,4 +16,7 @@ internal sealed class CodexRateLimitSnapshot
     public CodexCreditsSnapshot? Credits { get; init; }
 
     public string? PlanType { get; init; }
+
+    [JsonExtensionData]
+    public IDictionary<string, JsonElement>? ExtensionData { get; init; }
 }

@@ -1,4 +1,5 @@
 <Window x:Class="YiboCodexHUD.Desktop.Views.SettingsWindow"
+        x:Name="RootWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="YiboCodexHUD 设置"
@@ -30,6 +31,9 @@
                            Foreground="#5B5B57"
                            Text="按主题分组到标签页里，常用项会更容易找到。"
                            TextWrapping="Wrap" />
+                <TextBlock Margin="0,8,0,0"
+                           Foreground="#7A756C"
+                           Text="{Binding AppVersionText, ElementName=RootWindow}" />
             </StackPanel>
 
             <Button Grid.Column="1"
@@ -133,6 +137,14 @@
                                         <CheckBox Content="显示“重置次数”标签"
                                                   IsChecked="{Binding ShowResetCreditsLabel, Mode=OneWay}"
                                                   Command="{Binding ToggleShowResetCreditsLabelCommand}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="显示最近到期日期"
+                                                  IsChecked="{Binding ShowResetCreditsNearestExpiration, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowResetCreditsNearestExpirationCommand}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="显示全部到期日期"
+                                                  IsChecked="{Binding ShowResetCreditsAllExpirations, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowResetCreditsAllExpirationsCommand}" />
                                     </StackPanel>
 
                                     <CheckBox Margin="0,14,0,0"
@@ -262,7 +274,7 @@
                                     </WrapPanel>
 
                                     <CheckBox Margin="0,12,0,0"
-                                              Content="Codex 不可用时隐藏"
+                                              Content="Codex/ChatGPT 不可用时隐藏"
                                               IsChecked="{Binding HideWhenCodexUnavailable, Mode=OneWay}"
                                               Command="{Binding ToggleHideWhenCodexUnavailableCommand}" />
 
@@ -308,11 +320,29 @@
                                     <TextBlock FontSize="18"
                                                FontWeight="SemiBold"
                                                Foreground="#1E1E1C"
-                                               Text="位置微调" />
+                                               Text="位置" />
                                     <TextBlock Margin="0,4,0,0"
                                                Foreground="#6A6A65"
-                                               Text="仍然跟随 Codex 标题栏，只在最终位置上叠加偏移。"
+                                               Text="仍然跟随 Codex/ChatGPT 标题栏，只在最终位置上叠加偏移。"
                                                TextWrapping="Wrap" />
+
+                                    <TextBlock Margin="0,14,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="#2B2B28"
+                                               Text="水平停靠" />
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <RadioButton Margin="0,0,22,0"
+                                                     Content="居左"
+                                                     IsChecked="{Binding IsHorizontalAlignmentLeft, Mode=OneWay}"
+                                                     Command="{Binding SetHorizontalAlignmentLeftCommand}" />
+                                        <RadioButton Margin="0,0,22,0"
+                                                     Content="居中"
+                                                     IsChecked="{Binding IsHorizontalAlignmentCenter, Mode=OneWay}"
+                                                     Command="{Binding SetHorizontalAlignmentCenterCommand}" />
+                                        <RadioButton Content="居右"
+                                                     IsChecked="{Binding IsHorizontalAlignmentRight, Mode=OneWay}"
+                                                     Command="{Binding SetHorizontalAlignmentRightCommand}" />
+                                    </WrapPanel>
 
                                     <TextBlock Margin="0,14,0,0"
                                                FontWeight="SemiBold"
@@ -322,22 +352,30 @@
                                     <WrapPanel Margin="0,12,0,0">
                                         <Button Width="82"
                                                 Padding="10,6"
-                                                Command="{Binding NudgePositionLeftCommand}"
+                                                Tag="Left"
+                                                Click="OnNudgePositionButtonClick"
+                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
                                                 Content="左移" />
                                         <Button Width="82"
                                                 Margin="8,0,0,0"
                                                 Padding="10,6"
-                                                Command="{Binding NudgePositionUpCommand}"
+                                                Tag="Up"
+                                                Click="OnNudgePositionButtonClick"
+                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
                                                 Content="上移" />
                                         <Button Width="82"
                                                 Margin="8,0,0,0"
                                                 Padding="10,6"
-                                                Command="{Binding NudgePositionDownCommand}"
+                                                Tag="Down"
+                                                Click="OnNudgePositionButtonClick"
+                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
                                                 Content="下移" />
                                         <Button Width="82"
                                                 Margin="8,0,0,0"
                                                 Padding="10,6"
-                                                Command="{Binding NudgePositionRightCommand}"
+                                                Tag="Right"
+                                                Click="OnNudgePositionButtonClick"
+                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
                                                 Content="右移" />
                                         <Button Width="132"
                                                 Margin="8,0,0,0"
@@ -587,11 +625,11 @@
                                                Text="启动行为" />
                                     <TextBlock Margin="0,4,0,0"
                                                Foreground="#6A6A65"
-                                               Text="仅在本次 HUD 启动阶段尝试一次，不会持续守护重启 Codex。"
+                                               Text="仅在本次 HUD 启动阶段尝试一次，不会持续守护重启 Codex/ChatGPT。"
                                                TextWrapping="Wrap" />
 
                                     <CheckBox Margin="0,14,0,0"
-                                              Content="启动 HUD 时自动启动 Codex"
+                                              Content="启动 HUD 时自动启动 Codex/ChatGPT"
                                               IsChecked="{Binding AutoLaunchCodexOnStartup, Mode=OneWay}"
                                               Command="{Binding ToggleAutoLaunchCodexOnStartupCommand}" />
                                 </StackPanel>
