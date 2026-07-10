@@ -1,7 +1,8 @@
 param(
     [string]$Version = "1.0.3",
     [string]$PublishDir = ".tmp\release\v$Version\win-x64",
-    [string]$OutputDir = ".tmp\installer\v$Version"
+    [string]$OutputDir = ".tmp\installer\v$Version",
+    [string]$StableOutputDir = "dist\installer"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +15,9 @@ $payloadZipPath = Join-Path $outputPath "payload.zip"
 $publishOutputDir = Join-Path $outputPath "publish"
 $setupProjectPath = Join-Path $PSScriptRoot "YiboCodexHUD.Setup\YiboCodexHUD.Setup.csproj"
 $targetName = Join-Path $outputPath "YiboCodexHUD-Setup-v$Version.exe"
+$stableOutputPath = Join-Path $repoRoot $StableOutputDir
+$stableTargetName = Join-Path $stableOutputPath "YiboCodexHUD-Setup.exe"
+$stableVersionedTargetName = Join-Path $stableOutputPath "YiboCodexHUD-Setup-v$Version.exe"
 
 if (-not (Test-Path $publishPath)) {
     throw "Publish output not found: $publishPath"
@@ -26,6 +30,7 @@ if (-not (Test-Path $setupProjectPath)) {
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
 New-Item -ItemType Directory -Force -Path $payloadDir | Out-Null
 New-Item -ItemType Directory -Force -Path $publishOutputDir | Out-Null
+New-Item -ItemType Directory -Force -Path $stableOutputPath | Out-Null
 
 Get-ChildItem -LiteralPath $payloadDir -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse
 Get-ChildItem -LiteralPath $publishOutputDir -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse
@@ -61,4 +66,6 @@ if (-not (Test-Path $publishedExe)) {
 }
 
 Copy-Item -LiteralPath $publishedExe -Destination $targetName -Force
+Copy-Item -LiteralPath $publishedExe -Destination $stableTargetName -Force
+Copy-Item -LiteralPath $publishedExe -Destination $stableVersionedTargetName -Force
 Get-Item $targetName | Select-Object FullName, Length, LastWriteTime
