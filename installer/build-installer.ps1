@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.0.3",
+    [string]$Version = "1.0.4",
     [string]$PublishDir = ".tmp\release\v$Version\win-x64",
     [string]$OutputDir = ".tmp\installer\v$Version",
     [string]$StableOutputDir = "dist\installer"

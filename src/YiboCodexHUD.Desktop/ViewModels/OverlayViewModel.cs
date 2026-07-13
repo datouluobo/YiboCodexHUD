@@ -312,6 +312,7 @@ public partial class OverlayViewModel : ObservableObject
             snapshot.ShortWindowUsedPercent,
             FormatResetTime(snapshot.ShortWindowResetsAt),
             FormatResetTime(snapshot.ShortWindowResetsAt),
+            snapshot.ShortWindowResetsAt.HasValue,
             _settings.ShowShortWindowLabel,
             _settings.ShowShortRemainingPercent,
             _settings.ShowShortResetTime,
@@ -322,6 +323,7 @@ public partial class OverlayViewModel : ObservableObject
             snapshot.LongWindowUsedPercent,
             FormatResetDate(snapshot.LongWindowResetsAt),
             FormatCompactResetDate(snapshot.LongWindowResetsAt),
+            snapshot.LongWindowResetsAt.HasValue,
             _settings.ShowLongWindowLabel,
             _settings.ShowLongRemainingPercent,
             _settings.ShowLongResetTime,
@@ -882,11 +884,21 @@ public partial class OverlayViewModel : ObservableObject
         double? usedPercent,
         string fullResetAt,
         string compactResetAt,
+        bool hasResetAt,
         bool showWindowLabel,
         bool showRemainingPercent,
         bool showResetAt,
         double? remainingPercent)
     {
+        if (!HasDisplayableUsageWindow(minutes, usedPercent))
+        {
+            return new UsageWindowSegments(
+                string.Empty,
+                string.Empty,
+                Array.Empty<StyledDisplaySegment>(),
+                Array.Empty<StyledDisplaySegment>());
+        }
+
         var fullParts = new List<string>();
         var compactParts = new List<string>();
 
@@ -904,7 +916,7 @@ public partial class OverlayViewModel : ObservableObject
             compactParts.Add(remainingPercentText);
         }
 
-        if (showResetAt)
+        if (showResetAt && hasResetAt)
         {
             fullParts.Add($"重置 {fullResetAt}");
             compactParts.Add(compactResetAt);
@@ -926,16 +938,21 @@ public partial class OverlayViewModel : ObservableObject
 
     private string BuildResetCreditsSegment(int? value, IReadOnlyList<DateTimeOffset> expirations, bool compact)
     {
+        if (!HasDisplayableResetCredits(value, expirations))
+        {
+            return string.Empty;
+        }
+
         var effectiveValue = value ?? (expirations.Count > 0 ? expirations.Count : null);
         var prefix = _settings.ShowResetCreditsLabel
             ? compact
-                ? $"重置{(effectiveValue.HasValue ? FormatCredits(effectiveValue) : "--")}次"
-                : $"重置次数 {(effectiveValue.HasValue ? $"{FormatCredits(effectiveValue)} 次" : "--")}"
+                ? $"重置{FormatCredits(effectiveValue)}次"
+                : $"重置次数 {FormatCredits(effectiveValue)} 次"
             : effectiveValue.HasValue
                 ? compact
                     ? $"{FormatCredits(effectiveValue)}次"
                     : $"{FormatCredits(effectiveValue)} 次"
-                : compact ? "重置--次" : "重置次数 --";
+                : string.Empty;
 
         var expirationText = BuildResetCreditExpirationText(expirations, compact);
         return string.IsNullOrWhiteSpace(expirationText)
@@ -990,6 +1007,12 @@ public partial class OverlayViewModel : ObservableObject
 
         return compactSegments.FirstOrDefault(static item => !string.IsNullOrWhiteSpace(item)) ?? DisplayText;
     }
+
+    private static bool HasDisplayableUsageWindow(int? minutes, double? usedPercent) =>
+        minutes.HasValue && usedPercent.HasValue;
+
+    private static bool HasDisplayableResetCredits(int? value, IReadOnlyList<DateTimeOffset> expirations) =>
+        value.HasValue || expirations.Count > 0;
 
     private static string FormatRemainingPercent(double? usedPercent)
     {
@@ -1093,8 +1116,9 @@ public partial class OverlayViewModel : ObservableObject
 
     private static string BuildWindowMenuText(int? minutes, string fallbackName)
     {
-        var label = minutes.HasValue ? FormatWindow(minutes) : fallbackName;
-        return $"显示 {label} 额度";
+        return minutes.HasValue
+            ? $"显示{fallbackName}用量（{FormatWindow(minutes)}）"
+            : $"显示{fallbackName}用量";
     }
 
     private string BuildDisplayOrderSummary(HudDisplayItem item, string label)

@@ -7,6 +7,7 @@ namespace YiboCodexHUD.Infrastructure.Services;
 
 public sealed class RateLimitService : IRateLimitService
 {
+    private const int LongWindowThresholdMinutes = 1440;
     private readonly CodexProtocolClient _protocolClient;
     private readonly RateLimitResetCreditWebService _resetCreditWebService;
     private readonly IClock _clock;
@@ -60,16 +61,18 @@ public sealed class RateLimitService : IRateLimitService
                         FormatAvailableFields(snapshot.ExtensionData));
                 }
 
+                var normalizedWindows = NormalizeUsageWindows(snapshot.Primary, snapshot.Secondary);
+
                 _lastSuccessfulSnapshot = new UsageSnapshot
                 {
                     AccountEmail = null,
                     PlanType = snapshot.PlanType,
-                    ShortWindowUsedPercent = snapshot.Primary?.UsedPercent,
-                    ShortWindowMinutes = snapshot.Primary?.WindowDurationMins,
-                    ShortWindowResetsAt = ToDateTimeOffset(snapshot.Primary?.ResetsAt),
-                    LongWindowUsedPercent = snapshot.Secondary?.UsedPercent,
-                    LongWindowMinutes = snapshot.Secondary?.WindowDurationMins,
-                    LongWindowResetsAt = ToDateTimeOffset(snapshot.Secondary?.ResetsAt),
+                    ShortWindowUsedPercent = normalizedWindows.ShortWindow?.UsedPercent,
+                    ShortWindowMinutes = normalizedWindows.ShortWindow?.WindowDurationMins,
+                    ShortWindowResetsAt = ToDateTimeOffset(normalizedWindows.ShortWindow?.ResetsAt),
+                    LongWindowUsedPercent = normalizedWindows.LongWindow?.UsedPercent,
+                    LongWindowMinutes = normalizedWindows.LongWindow?.WindowDurationMins,
+                    LongWindowResetsAt = ToDateTimeOffset(normalizedWindows.LongWindow?.ResetsAt),
                     ResetCreditsAvailable = resetCreditsAvailable,
                     ResetCreditExpirations = resetCreditExpirations,
                     FetchedAt = fetchedAt
@@ -110,6 +113,49 @@ public sealed class RateLimitService : IRateLimitService
 
     private static DateTimeOffset? ToDateTimeOffset(long? unixSeconds) =>
         unixSeconds is null ? null : DateTimeOffset.FromUnixTimeSeconds(unixSeconds.Value);
+
+    private static NormalizedUsageWindows NormalizeUsageWindows(
+        CodexRateLimitWindow? primary,
+        CodexRateLimitWindow? secondary)
+    {
+        var windows = new[]
+            {
+                ToUsageWindow(primary),
+                ToUsageWindow(secondary)
+            }
+            .Where(static window => window is not null)
+            .Select(static window => window!)
+            .OrderBy(static window => window.WindowDurationMins ?? int.MaxValue)
+            .ThenBy(static window => window.ResetsAt ?? long.MaxValue)
+            .ToArray();
+
+        return windows.Length switch
+        {
+            0 => new NormalizedUsageWindows(null, null),
+            1 when ShouldTreatAsLongWindow(windows[0]) => new NormalizedUsageWindows(null, windows[0]),
+            1 => new NormalizedUsageWindows(windows[0], null),
+            _ => new NormalizedUsageWindows(windows[0], windows[^1])
+        };
+    }
+
+    private static UsageWindow? ToUsageWindow(CodexRateLimitWindow? window)
+    {
+        if (window is null)
+        {
+            return null;
+        }
+
+        var hasUsedPercent = !double.IsNaN(window.UsedPercent) && window.UsedPercent > 0d;
+        if (!hasUsedPercent && window.WindowDurationMins is null && window.ResetsAt is null)
+        {
+            return null;
+        }
+
+        return new UsageWindow(window.UsedPercent, window.WindowDurationMins, window.ResetsAt);
+    }
+
+    private static bool ShouldTreatAsLongWindow(UsageWindow window) =>
+        window.WindowDurationMins.HasValue && window.WindowDurationMins.Value >= LongWindowThresholdMinutes;
 
     private static int? GetResetCreditsAvailable(
         CodexRateLimitResetCredits? resetCredits,
@@ -211,4 +257,8 @@ public sealed class RateLimitService : IRateLimitService
 
         return string.Join(", ", extensionData.Keys.OrderBy(static key => key, StringComparer.Ordinal));
     }
+
+    private sealed record UsageWindow(double UsedPercent, int? WindowDurationMins, long? ResetsAt);
+
+    private sealed record NormalizedUsageWindows(UsageWindow? ShortWindow, UsageWindow? LongWindow);
 }

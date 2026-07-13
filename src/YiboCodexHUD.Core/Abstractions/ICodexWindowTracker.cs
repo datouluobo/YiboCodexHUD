@@ -5,4 +5,6 @@ namespace YiboCodexHUD.Core.Abstractions;
 public interface ICodexWindowTracker
 {
     TrackedWindow? GetTrackedWindow();
+
+    bool TryActivateTrackedWindow();
 }

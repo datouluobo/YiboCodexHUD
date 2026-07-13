@@ -15,6 +15,7 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
     private const int DwmwaExtendedFrameBounds = 9;
     private const int DwmwaCloaked = 14;
     private const int HtCaption = 2;
+    private const int SwRestore = 9;
     private const uint MonitorDefaultToNearest = 2;
     private const uint GaRootOwner = 3;
     private const uint GaRoot = 2;
@@ -56,6 +57,29 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
         }, IntPtr.Zero);
 
         return bestMatch;
+    }
+
+    public bool TryActivateTrackedWindow()
+    {
+        var trackedWindow = GetTrackedWindow();
+        if (trackedWindow is null)
+        {
+            return false;
+        }
+
+        var windowHandle = trackedWindow.Handle;
+        if (windowHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        if (IsIconic(windowHandle))
+        {
+            _ = ShowWindow(windowHandle, SwRestore);
+        }
+
+        _ = BringWindowToTop(windowHandle);
+        return SetForegroundWindow(windowHandle);
     }
 
     private static TrackedWindow? TryCreateTrackedWindow(IntPtr windowHandle, IntPtr foregroundWindow, out int candidateScore)
@@ -587,6 +611,22 @@ public sealed partial class Win32CodexWindowTracker : ICodexWindowTracker
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsZoomed(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);

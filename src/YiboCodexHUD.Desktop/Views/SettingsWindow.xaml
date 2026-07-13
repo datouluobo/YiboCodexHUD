@@ -86,6 +86,10 @@
                                                Foreground="#6A6A65"
                                                Text="{Binding DisplayItemsHintText}"
                                                TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,6,0,0"
+                                               Foreground="#7A756C"
+                                               Text="当 Codex 未返回某个窗口或对应重置时间时，HUD 会自动隐藏该项，避免显示过期字段。"
+                                               TextWrapping="Wrap" />
 
                                     <CheckBox Margin="0,14,0,0"
                                               Content="{Binding ShortWindowMenuText}"
@@ -102,7 +106,7 @@
                                                   IsChecked="{Binding ShowShortRemainingPercent, Mode=OneWay}"
                                                   Command="{Binding ToggleShowShortRemainingPercentCommand}" />
                                         <CheckBox Margin="0,6,0,0"
-                                                  Content="显示重置时间"
+                                                  Content="显示重置时间（有值时）"
                                                   IsChecked="{Binding ShowShortResetTime, Mode=OneWay}"
                                                   Command="{Binding ToggleShowShortResetTimeCommand}" />
                                     </StackPanel>
@@ -122,7 +126,7 @@
                                                   IsChecked="{Binding ShowLongRemainingPercent, Mode=OneWay}"
                                                   Command="{Binding ToggleShowLongRemainingPercentCommand}" />
                                         <CheckBox Margin="0,6,0,0"
-                                                  Content="显示重置日期"
+                                                  Content="显示重置时间（有值时）"
                                                   IsChecked="{Binding ShowLongResetTime, Mode=OneWay}"
                                                   Command="{Binding ToggleShowLongResetTimeCommand}" />
                                     </StackPanel>
