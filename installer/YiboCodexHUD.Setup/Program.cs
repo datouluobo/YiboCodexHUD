@@ -33,9 +33,11 @@ internal static class Program
             var installDir = GetInstallDirectory();
             var startMenuDir = GetStartMenuDirectory();
             var desktopShortcutPath = GetDesktopShortcutPath();
+            var exePath = Path.Combine(installDir, AppExeName);
 
             Directory.CreateDirectory(installDir);
             Directory.CreateDirectory(startMenuDir);
+            StopRunningInstalledApp(exePath);
 
             var tempZipPath = Path.Combine(Path.GetTempPath(), $"{AppName}-payload-{Guid.NewGuid():N}.zip");
             using (var resourceStream = GetPayloadStream())
@@ -47,7 +49,6 @@ internal static class Program
             ZipFile.ExtractToDirectory(tempZipPath, installDir, overwriteFiles: true);
             File.Delete(tempZipPath);
 
-            var exePath = Path.Combine(installDir, AppExeName);
             var iconPath = Path.Combine(installDir, AppIconFileName);
             var currentExecutablePath = Environment.ProcessPath
                 ?? throw new InvalidOperationException("Unable to resolve installer executable path.");
