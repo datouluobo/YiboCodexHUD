@@ -44,9 +44,11 @@ public sealed class RateLimitService : IRateLimitService
                 var snapshot = rateLimitsResponse?.RateLimits
                     ?? throw new InvalidOperationException("Codex/ChatGPT app-server returned no rate limit snapshot.");
                 var resetCredits = rateLimitsResponse.RateLimitResetCredits ?? rateLimitsResponse.SnakeCaseRateLimitResetCredits;
-                if (resetCredits is null || (resetCredits.AvailableCount is null && resetCredits.SnakeCaseAvailableCount is null && (resetCredits.Credits is null || resetCredits.Credits.Count == 0)))
+                if (!HasCreditRows(resetCredits))
                 {
-                    resetCredits = await _resetCreditWebService.TryFetchAsync(cancellationToken) ?? resetCredits;
+                    resetCredits = PreferDetailedResetCredits(
+                        resetCredits,
+                        await _resetCreditWebService.TryFetchAsync(cancellationToken));
                 }
 
                 var resetCreditExpirations = GetResetCreditExpirations(resetCredits);
@@ -166,26 +168,43 @@ public sealed class RateLimitService : IRateLimitService
             return null;
         }
 
-        if (resetCredits.AvailableCount.HasValue)
-        {
-            return resetCredits.AvailableCount.Value;
-        }
-
-        if (resetCredits.SnakeCaseAvailableCount.HasValue)
-        {
-            return resetCredits.SnakeCaseAvailableCount.Value;
-        }
-
+        var reportedAvailableCount = resetCredits.AvailableCount ?? resetCredits.SnakeCaseAvailableCount;
         if (resetCredits.Credits is null || resetCredits.Credits.Count == 0)
         {
-            return resetCreditExpirations.Count > 0 ? resetCreditExpirations.Count : null;
+            return reportedAvailableCount ?? (resetCreditExpirations.Count > 0 ? resetCreditExpirations.Count : null);
         }
 
         var availableCredits = resetCredits.Credits.Count(static credit =>
             string.IsNullOrWhiteSpace(credit.Status)
             || string.Equals(credit.Status, "available", StringComparison.OrdinalIgnoreCase));
 
-        return availableCredits > 0 ? availableCredits : resetCreditExpirations.Count;
+        var listAvailableCount = availableCredits > 0
+            ? availableCredits
+            : resetCreditExpirations.Count > 0
+                ? resetCreditExpirations.Count
+                : resetCredits.Credits.Count;
+
+        return listAvailableCount > 0 ? listAvailableCount : reportedAvailableCount;
+    }
+
+    private static bool HasCreditRows(CodexRateLimitResetCredits? resetCredits) =>
+        resetCredits?.Credits is { Count: > 0 };
+
+    private static CodexRateLimitResetCredits? PreferDetailedResetCredits(
+        CodexRateLimitResetCredits? primary,
+        CodexRateLimitResetCredits? fallback)
+    {
+        if (fallback is null)
+        {
+            return primary;
+        }
+
+        if (!HasCreditRows(primary) && HasCreditRows(fallback))
+        {
+            return fallback;
+        }
+
+        return primary ?? fallback;
     }
 
     private static IReadOnlyList<DateTimeOffset> GetResetCreditExpirations(CodexRateLimitResetCredits? resetCredits)

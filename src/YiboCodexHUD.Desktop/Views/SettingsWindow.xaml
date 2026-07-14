@@ -277,11 +277,6 @@
                                                      Command="{Binding SetFontSize24Command}" />
                                     </WrapPanel>
 
-                                    <CheckBox Margin="0,12,0,0"
-                                              Content="Codex/ChatGPT 不可用时隐藏"
-                                              IsChecked="{Binding HideWhenCodexUnavailable, Mode=OneWay}"
-                                              Command="{Binding ToggleHideWhenCodexUnavailableCommand}" />
-
                                     <TextBlock Margin="0,18,0,0"
                                                FontWeight="SemiBold"
                                                Foreground="#2B2B28"

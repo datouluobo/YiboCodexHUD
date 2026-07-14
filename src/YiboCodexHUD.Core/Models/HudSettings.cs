@@ -18,7 +18,7 @@ public sealed record HudSettings
 
     public int FontSize { get; init; } = 18;
 
-    public bool HideWhenCodexUnavailable { get; init; }
+    public bool HideWhenCodexUnavailable { get; init; } = true;
 
     // Legacy shared offsets kept for backward-compatible imports.
     public int PositionOffsetX { get; init; }

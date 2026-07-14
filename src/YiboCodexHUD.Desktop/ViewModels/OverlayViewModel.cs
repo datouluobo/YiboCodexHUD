@@ -263,13 +263,6 @@ public partial class OverlayViewModel : ObservableObject
             if (trackedWindow is null)
             {
                 IsCodexWindowAvailable = false;
-                if (!_settings.HideWhenCodexUnavailable)
-                {
-                    DisplayText = "等待 Codex/ChatGPT 窗口...";
-                    CompactDisplayText = DisplayText;
-                    MinimalDisplayText = DisplayText;
-                }
-
                 UpdateDisplayForegroundBrush();
                 return;
             }
@@ -442,10 +435,6 @@ public partial class OverlayViewModel : ObservableObject
     [RelayCommand]
     private Task SetFontSize24Async(CancellationToken cancellationToken) =>
         UpdateSettingsAsync(_settings with { FontSize = 24 }, cancellationToken);
-
-    [RelayCommand]
-    private Task ToggleHideWhenCodexUnavailableAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { HideWhenCodexUnavailable = !_settings.HideWhenCodexUnavailable }, cancellationToken);
 
     [RelayCommand]
     private Task SetHorizontalAlignmentLeftAsync(CancellationToken cancellationToken) =>
@@ -716,7 +705,6 @@ public partial class OverlayViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFontSize20));
         OnPropertyChanged(nameof(IsFontSize22));
         OnPropertyChanged(nameof(IsFontSize24));
-        OnPropertyChanged(nameof(HideWhenCodexUnavailable));
         OnPropertyChanged(nameof(DisplayFontSize));
         OnPropertyChanged(nameof(IsHorizontalAlignmentLeft));
         OnPropertyChanged(nameof(IsHorizontalAlignmentCenter));
@@ -1265,6 +1253,7 @@ public partial class OverlayViewModel : ObservableObject
         {
             PositionOffsetX = 0,
             PositionOffsetY = 0,
+            HideWhenCodexUnavailable = true,
             HorizontalAlignment = normalizedHorizontalAlignment,
             LeftPositionOffsetX = leftOffsetX,
             LeftPositionOffsetY = leftOffsetY,
