@@ -10,6 +10,20 @@ public sealed record HudSettings
 
     public bool ShowResetCredits { get; init; } = true;
 
+    public bool ShowTokenUsage { get; init; } = true;
+
+    public bool ShowCurrentTokenUsage { get; init; } = true;
+
+    public bool ShowTodayTokenUsage { get; init; } = true;
+
+    public bool ShowCurrentPeriodTokenUsage { get; init; } = true;
+
+    public TokenUsageDisplayFormat TokenUsageDisplayFormat { get; init; } = TokenUsageDisplayFormat.Total;
+
+    public TokenUsageUnitFormat TokenUsageUnitFormat { get; init; } = TokenUsageUnitFormat.Auto;
+
+    public int TokenUsageRefreshIntervalSeconds { get; init; } = 20;
+
     public bool AutoRefreshEnabled { get; init; } = true;
 
     public int RefreshIntervalSeconds { get; init; } = 20;
@@ -79,7 +93,9 @@ public sealed record HudSettings
 
     public int LongWindowOrder { get; init; } = 1;
 
-    public int ResetCreditsOrder { get; init; } = 2;
+    public int TokenUsageOrder { get; init; } = 2;
+
+    public int ResetCreditsOrder { get; init; } = 3;
 
     public double? SettingsWindowLeft { get; init; }
 

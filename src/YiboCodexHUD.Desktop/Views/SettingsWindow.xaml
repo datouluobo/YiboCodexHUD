@@ -132,6 +132,78 @@
                                     </StackPanel>
 
                                     <CheckBox Margin="0,14,0,0"
+                                              Content="显示 Token 用量"
+                                              IsEnabled="{Binding CanToggleTokenUsage}"
+                                              IsChecked="{Binding ShowTokenUsage, Mode=OneWay}"
+                                              Command="{Binding ToggleTokenUsageCommand}" />
+                                    <StackPanel Margin="24,8,0,0"
+                                                IsEnabled="{Binding ShowTokenUsage}">
+                                        <CheckBox Content="显示本次"
+                                                  IsEnabled="{Binding CanToggleCurrentTokenUsage}"
+                                                  IsChecked="{Binding ShowCurrentTokenUsage, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowCurrentTokenUsageCommand}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="显示今日"
+                                                  IsEnabled="{Binding CanToggleTodayTokenUsage}"
+                                                  IsChecked="{Binding ShowTodayTokenUsage, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowTodayTokenUsageCommand}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="显示本周期"
+                                                  IsEnabled="{Binding CanToggleCurrentPeriodTokenUsage}"
+                                                  IsChecked="{Binding ShowCurrentPeriodTokenUsage, Mode=OneWay}"
+                                                  Command="{Binding ToggleShowCurrentPeriodTokenUsageCommand}" />
+
+                                        <TextBlock Margin="0,12,0,0"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2B2B28"
+                                                   Text="显示格式" />
+                                        <WrapPanel Margin="0,6,0,0">
+                                            <RadioButton Margin="0,0,18,8"
+                                                         Content="总量"
+                                                         IsChecked="{Binding IsTokenUsageTotalFormat, Mode=OneWay}"
+                                                         Command="{Binding SetTokenUsageTotalFormatCommand}" />
+                                            <RadioButton Margin="0,0,18,8"
+                                                         Content="输入 / 输出拆分"
+                                                         IsChecked="{Binding IsTokenUsageInputOutputFormat, Mode=OneWay}"
+                                                         Command="{Binding SetTokenUsageInputOutputFormatCommand}" />
+                                        </WrapPanel>
+
+                                        <TextBlock Margin="0,8,0,0"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2B2B28"
+                                                   Text="单位格式" />
+                                        <WrapPanel Margin="0,6,0,0">
+                                            <RadioButton Margin="0,0,18,8"
+                                                         Content="自动简写"
+                                                         IsChecked="{Binding IsTokenUsageAutoUnitFormat, Mode=OneWay}"
+                                                         Command="{Binding SetTokenUsageAutoUnitFormatCommand}" />
+                                            <RadioButton Margin="0,0,18,8"
+                                                         Content="完整数字"
+                                                         IsChecked="{Binding IsTokenUsageFullUnitFormat, Mode=OneWay}"
+                                                         Command="{Binding SetTokenUsageFullUnitFormatCommand}" />
+                                        </WrapPanel>
+
+                                        <TextBlock Margin="0,8,0,0"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2B2B28"
+                                                   Text="Token 用量刷新频率" />
+                                        <WrapPanel Margin="0,6,0,0">
+                                            <RadioButton Margin="0,0,18,8"
+                                                         Content="10 秒"
+                                                         IsChecked="{Binding IsTokenUsageRefreshEvery10Seconds, Mode=OneWay}"
+                                                         Command="{Binding SetTokenUsageRefreshEvery10SecondsCommand}" />
+                                            <RadioButton Margin="0,0,18,8"
+                                                         Content="20 秒"
+                                                         IsChecked="{Binding IsTokenUsageRefreshEvery20Seconds, Mode=OneWay}"
+                                                         Command="{Binding SetTokenUsageRefreshEvery20SecondsCommand}" />
+                                            <RadioButton Margin="0,0,18,8"
+                                                         Content="1 分钟"
+                                                         IsChecked="{Binding IsTokenUsageRefreshEvery60Seconds, Mode=OneWay}"
+                                                         Command="{Binding SetTokenUsageRefreshEvery60SecondsCommand}" />
+                                        </WrapPanel>
+                                    </StackPanel>
+
+                                    <CheckBox Margin="0,14,0,0"
                                               Content="显示重置次数"
                                               IsEnabled="{Binding CanToggleResetCredits}"
                                               IsChecked="{Binding ShowResetCredits, Mode=OneWay}"
@@ -171,7 +243,7 @@
                                                Text="显示顺序" />
                                     <TextBlock Margin="0,4,0,0"
                                                Foreground="#6A6A65"
-                                               Text="控制短周期、长周期和重置次数在 HUD 中的先后顺序。"
+                                               Text="控制短周期、长周期、Token 用量和重置次数在 HUD 中的先后顺序。"
                                                TextWrapping="Wrap" />
 
                                     <ItemsControl Margin="0,14,0,0"

@@ -92,9 +92,24 @@ public partial class OverlayViewModel : ObservableObject
     public bool ShowShortWindow => _settings.ShowShortWindow;
     public bool ShowLongWindow => _settings.ShowLongWindow;
     public bool ShowResetCredits => _settings.ShowResetCredits;
+    public bool ShowTokenUsage => _settings.ShowTokenUsage;
+    public bool ShowCurrentTokenUsage => _settings.ShowCurrentTokenUsage;
+    public bool ShowTodayTokenUsage => _settings.ShowTodayTokenUsage;
+    public bool ShowCurrentPeriodTokenUsage => _settings.ShowCurrentPeriodTokenUsage;
+    public bool IsTokenUsageTotalFormat => _settings.TokenUsageDisplayFormat == TokenUsageDisplayFormat.Total;
+    public bool IsTokenUsageInputOutputFormat => _settings.TokenUsageDisplayFormat == TokenUsageDisplayFormat.InputOutput;
+    public bool IsTokenUsageAutoUnitFormat => _settings.TokenUsageUnitFormat == TokenUsageUnitFormat.Auto;
+    public bool IsTokenUsageFullUnitFormat => _settings.TokenUsageUnitFormat == TokenUsageUnitFormat.Full;
+    public bool IsTokenUsageRefreshEvery10Seconds => _settings.TokenUsageRefreshIntervalSeconds == 10;
+    public bool IsTokenUsageRefreshEvery20Seconds => _settings.TokenUsageRefreshIntervalSeconds == 20;
+    public bool IsTokenUsageRefreshEvery60Seconds => _settings.TokenUsageRefreshIntervalSeconds == 60;
     public bool CanToggleShortWindow => !ShowShortWindow || GetEnabledDisplayItemCount() > 1;
     public bool CanToggleLongWindow => !ShowLongWindow || GetEnabledDisplayItemCount() > 1;
     public bool CanToggleResetCredits => !ShowResetCredits || GetEnabledDisplayItemCount() > 1;
+    public bool CanToggleTokenUsage => !ShowTokenUsage || GetEnabledDisplayItemCount() > 1;
+    public bool CanToggleCurrentTokenUsage => !ShowCurrentTokenUsage || GetEnabledTokenUsageRangeCount() > 1;
+    public bool CanToggleTodayTokenUsage => !ShowTodayTokenUsage || GetEnabledTokenUsageRangeCount() > 1;
+    public bool CanToggleCurrentPeriodTokenUsage => !ShowCurrentPeriodTokenUsage || GetEnabledTokenUsageRangeCount() > 1;
     public bool IsOnlyOneDisplayItemEnabled => GetEnabledDisplayItemCount() == 1;
     public string DisplayItemsHintText => IsOnlyOneDisplayItemEnabled
         ? "至少保留一个显示项，当前最后一项不可关闭。"
@@ -152,14 +167,18 @@ public partial class OverlayViewModel : ObservableObject
     public bool ShowSeparatorDots => _settings.ShowSeparatorDots;
     public int ShortWindowOrder => _settings.ShortWindowOrder;
     public int LongWindowOrder => _settings.LongWindowOrder;
+    public int TokenUsageOrder => _settings.TokenUsageOrder;
     public int ResetCreditsOrder => _settings.ResetCreditsOrder;
     public string ShortWindowOrderSummary => BuildDisplayOrderSummary(HudDisplayItem.ShortWindow, "短周期");
     public string LongWindowOrderSummary => BuildDisplayOrderSummary(HudDisplayItem.LongWindow, "长周期");
+    public string TokenUsageOrderSummary => BuildDisplayOrderSummary(HudDisplayItem.TokenUsage, "Token 用量");
     public string ResetCreditsOrderSummary => BuildDisplayOrderSummary(HudDisplayItem.ResetCredits, "重置次数");
     public bool CanMoveShortWindowUp => CanMoveDisplayItem(HudDisplayItem.ShortWindow, moveUp: true);
     public bool CanMoveShortWindowDown => CanMoveDisplayItem(HudDisplayItem.ShortWindow, moveUp: false);
     public bool CanMoveLongWindowUp => CanMoveDisplayItem(HudDisplayItem.LongWindow, moveUp: true);
     public bool CanMoveLongWindowDown => CanMoveDisplayItem(HudDisplayItem.LongWindow, moveUp: false);
+    public bool CanMoveTokenUsageUp => CanMoveDisplayItem(HudDisplayItem.TokenUsage, moveUp: true);
+    public bool CanMoveTokenUsageDown => CanMoveDisplayItem(HudDisplayItem.TokenUsage, moveUp: false);
     public bool CanMoveResetCreditsUp => CanMoveDisplayItem(HudDisplayItem.ResetCredits, moveUp: true);
     public bool CanMoveResetCreditsDown => CanMoveDisplayItem(HudDisplayItem.ResetCredits, moveUp: false);
     public IReadOnlyList<DisplayOrderRow> DisplayOrderRows => BuildDisplayOrderRows();
@@ -235,7 +254,7 @@ public partial class OverlayViewModel : ObservableObject
             try
             {
                 var delay = _settings.AutoRefreshEnabled
-                    ? TimeSpan.FromSeconds(Math.Clamp(_settings.RefreshIntervalSeconds, 5, 3600))
+                    ? TimeSpan.FromSeconds(GetEffectiveRefreshIntervalSeconds(_settings))
                     : TimeSpan.FromMilliseconds(500);
 
                 await Task.Delay(delay);
@@ -321,6 +340,8 @@ public partial class OverlayViewModel : ObservableObject
             _settings.ShowLongRemainingPercent,
             _settings.ShowLongResetTime,
             longRemainingPercent);
+        var tokenUsageSegments = BuildTokenUsageSegments(snapshot, compact: false);
+        var tokenUsageCompactSegments = BuildTokenUsageSegments(snapshot, compact: true);
 
         foreach (var displayItem in GetOrderedDisplayItems())
         {
@@ -337,6 +358,15 @@ public partial class OverlayViewModel : ObservableObject
                     compactSegments.Add(longWindowSegments.Compact);
                     fullDisplaySegments.AddRange(longWindowSegments.FullSegments);
                     compactDisplaySegments.AddRange(longWindowSegments.CompactSegments);
+                    break;
+                case HudDisplayItem.TokenUsage when _settings.ShowTokenUsage:
+                    if (!string.IsNullOrWhiteSpace(tokenUsageSegments))
+                    {
+                        fullSegments.Add(tokenUsageSegments);
+                        compactSegments.Add(tokenUsageCompactSegments);
+                        fullDisplaySegments.Add(CreateStyledSegment(tokenUsageSegments));
+                        compactDisplaySegments.Add(CreateStyledSegment(tokenUsageCompactSegments));
+                    }
                     break;
                 case HudDisplayItem.ResetCredits when _settings.ShowResetCredits:
                     var resetCreditsFull = BuildResetCreditsSegment(snapshot.ResetCreditsAvailable, snapshot.ResetCreditExpirations, compact: false);
@@ -379,6 +409,10 @@ public partial class OverlayViewModel : ObservableObject
     [RelayCommand]
     private Task ToggleResetCreditsAsync(CancellationToken cancellationToken) =>
         UpdateSettingsAsync(_settings with { ShowResetCredits = !_settings.ShowResetCredits }, cancellationToken);
+
+    [RelayCommand]
+    private Task ToggleTokenUsageAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { ShowTokenUsage = !_settings.ShowTokenUsage }, cancellationToken);
 
     [RelayCommand]
     private Task ToggleAutoLaunchCodexOnStartupAsync(CancellationToken cancellationToken) =>
@@ -600,6 +634,46 @@ public partial class OverlayViewModel : ObservableObject
         UpdateSettingsAsync(_settings with { ShowResetCreditsLabel = !_settings.ShowResetCreditsLabel }, cancellationToken);
 
     [RelayCommand]
+    private Task ToggleShowCurrentTokenUsageAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { ShowCurrentTokenUsage = !_settings.ShowCurrentTokenUsage }, cancellationToken);
+
+    [RelayCommand]
+    private Task ToggleShowTodayTokenUsageAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { ShowTodayTokenUsage = !_settings.ShowTodayTokenUsage }, cancellationToken);
+
+    [RelayCommand]
+    private Task ToggleShowCurrentPeriodTokenUsageAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { ShowCurrentPeriodTokenUsage = !_settings.ShowCurrentPeriodTokenUsage }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetTokenUsageTotalFormatAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { TokenUsageDisplayFormat = TokenUsageDisplayFormat.Total }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetTokenUsageInputOutputFormatAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { TokenUsageDisplayFormat = TokenUsageDisplayFormat.InputOutput }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetTokenUsageAutoUnitFormatAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { TokenUsageUnitFormat = TokenUsageUnitFormat.Auto }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetTokenUsageFullUnitFormatAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { TokenUsageUnitFormat = TokenUsageUnitFormat.Full }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetTokenUsageRefreshEvery10SecondsAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { TokenUsageRefreshIntervalSeconds = 10 }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetTokenUsageRefreshEvery20SecondsAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { TokenUsageRefreshIntervalSeconds = 20 }, cancellationToken);
+
+    [RelayCommand]
+    private Task SetTokenUsageRefreshEvery60SecondsAsync(CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(_settings with { TokenUsageRefreshIntervalSeconds = 60 }, cancellationToken);
+
+    [RelayCommand]
     private Task ToggleShowResetCreditsNearestExpirationAsync(CancellationToken cancellationToken) =>
         UpdateSettingsAsync(
             _settings.ShowResetCreditsNearestExpiration
@@ -644,6 +718,14 @@ public partial class OverlayViewModel : ObservableObject
         MoveDisplayItemAsync(HudDisplayItem.LongWindow, moveUp: false, cancellationToken);
 
     [RelayCommand]
+    private Task MoveTokenUsageUpAsync(CancellationToken cancellationToken) =>
+        MoveDisplayItemAsync(HudDisplayItem.TokenUsage, moveUp: true, cancellationToken);
+
+    [RelayCommand]
+    private Task MoveTokenUsageDownAsync(CancellationToken cancellationToken) =>
+        MoveDisplayItemAsync(HudDisplayItem.TokenUsage, moveUp: false, cancellationToken);
+
+    [RelayCommand]
     private Task MoveResetCreditsUpAsync(CancellationToken cancellationToken) =>
         MoveDisplayItemAsync(HudDisplayItem.ResetCredits, moveUp: true, cancellationToken);
 
@@ -686,9 +768,24 @@ public partial class OverlayViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowShortWindow));
         OnPropertyChanged(nameof(ShowLongWindow));
         OnPropertyChanged(nameof(ShowResetCredits));
+        OnPropertyChanged(nameof(ShowTokenUsage));
+        OnPropertyChanged(nameof(ShowCurrentTokenUsage));
+        OnPropertyChanged(nameof(ShowTodayTokenUsage));
+        OnPropertyChanged(nameof(ShowCurrentPeriodTokenUsage));
+        OnPropertyChanged(nameof(IsTokenUsageTotalFormat));
+        OnPropertyChanged(nameof(IsTokenUsageInputOutputFormat));
+        OnPropertyChanged(nameof(IsTokenUsageAutoUnitFormat));
+        OnPropertyChanged(nameof(IsTokenUsageFullUnitFormat));
+        OnPropertyChanged(nameof(IsTokenUsageRefreshEvery10Seconds));
+        OnPropertyChanged(nameof(IsTokenUsageRefreshEvery20Seconds));
+        OnPropertyChanged(nameof(IsTokenUsageRefreshEvery60Seconds));
         OnPropertyChanged(nameof(CanToggleShortWindow));
         OnPropertyChanged(nameof(CanToggleLongWindow));
         OnPropertyChanged(nameof(CanToggleResetCredits));
+        OnPropertyChanged(nameof(CanToggleTokenUsage));
+        OnPropertyChanged(nameof(CanToggleCurrentTokenUsage));
+        OnPropertyChanged(nameof(CanToggleTodayTokenUsage));
+        OnPropertyChanged(nameof(CanToggleCurrentPeriodTokenUsage));
         OnPropertyChanged(nameof(IsOnlyOneDisplayItemEnabled));
         OnPropertyChanged(nameof(DisplayItemsHintText));
         OnPropertyChanged(nameof(AutoLaunchCodexOnStartup));
@@ -738,15 +835,19 @@ public partial class OverlayViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowSeparatorDots));
         OnPropertyChanged(nameof(ShortWindowOrder));
         OnPropertyChanged(nameof(LongWindowOrder));
+        OnPropertyChanged(nameof(TokenUsageOrder));
         OnPropertyChanged(nameof(ResetCreditsOrder));
         OnPropertyChanged(nameof(ShortWindowOrderSummary));
         OnPropertyChanged(nameof(LongWindowOrderSummary));
+        OnPropertyChanged(nameof(TokenUsageOrderSummary));
         OnPropertyChanged(nameof(ResetCreditsOrderSummary));
         OnPropertyChanged(nameof(DisplayOrderRows));
         OnPropertyChanged(nameof(CanMoveShortWindowUp));
         OnPropertyChanged(nameof(CanMoveShortWindowDown));
         OnPropertyChanged(nameof(CanMoveLongWindowUp));
         OnPropertyChanged(nameof(CanMoveLongWindowDown));
+        OnPropertyChanged(nameof(CanMoveTokenUsageUp));
+        OnPropertyChanged(nameof(CanMoveTokenUsageDown));
         OnPropertyChanged(nameof(CanMoveResetCreditsUp));
         OnPropertyChanged(nameof(CanMoveResetCreditsDown));
         OnPropertyChanged(nameof(AutoRefreshHintText));
@@ -948,6 +1049,54 @@ public partial class OverlayViewModel : ObservableObject
             : $"{prefix} {expirationText}";
     }
 
+    private string BuildTokenUsageSegments(UsageSnapshot snapshot, bool compact)
+    {
+        var parts = new List<string>();
+
+        AddTokenUsagePart(parts, "次", snapshot.CurrentTokenUsage, _settings.ShowCurrentTokenUsage);
+        AddTokenUsagePart(parts, "今", snapshot.TodayTokenUsage, _settings.ShowTodayTokenUsage);
+        AddTokenUsagePart(parts, "周", snapshot.CurrentPeriodTokenUsage, _settings.ShowCurrentPeriodTokenUsage);
+
+        return string.Join(compact ? " · " : " · ", parts);
+    }
+
+    private void AddTokenUsagePart(
+        ICollection<string> parts,
+        string label,
+        TokenUsageRangeSnapshot? usage,
+        bool isEnabled)
+    {
+        if (!isEnabled || usage?.HasAnyTokens != true)
+        {
+            return;
+        }
+
+        var text = _settings.TokenUsageDisplayFormat == TokenUsageDisplayFormat.InputOutput
+            ? BuildInputOutputTokenUsageText(label, usage)
+            : BuildTotalTokenUsageText(label, usage);
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            parts.Add(text);
+        }
+    }
+
+    private string BuildTotalTokenUsageText(string label, TokenUsageRangeSnapshot usage)
+    {
+        var total = usage.EffectiveTotalTokens;
+        return total.HasValue ? $"{label}{FormatTokens(total.Value)}" : string.Empty;
+    }
+
+    private string BuildInputOutputTokenUsageText(string label, TokenUsageRangeSnapshot usage)
+    {
+        if (!usage.InputTokens.HasValue && !usage.OutputTokens.HasValue)
+        {
+            return BuildTotalTokenUsageText(label, usage);
+        }
+
+        return $"{label}入{FormatTokens(usage.InputTokens ?? 0)}/出{FormatTokens(usage.OutputTokens ?? 0)}";
+    }
+
     private string BuildResetCreditExpirationText(IReadOnlyList<DateTimeOffset> expirations, bool compact)
     {
         if (expirations.Count == 0)
@@ -1042,6 +1191,22 @@ public partial class OverlayViewModel : ObservableObject
         return value.Value == int.MaxValue ? "不限" : value.Value.ToString();
     }
 
+    private string FormatTokens(long value)
+    {
+        value = Math.Max(0, value);
+        if (_settings.TokenUsageUnitFormat == TokenUsageUnitFormat.Full)
+        {
+            return value.ToString();
+        }
+
+        return value switch
+        {
+            >= 1_000_000 => $"{value / 1_000_000d:0.#}M",
+            >= 1_000 => $"{value / 1_000d:0.#}k",
+            _ => value.ToString()
+        };
+    }
+
     private static string FormatResetTime(DateTimeOffset? value)
     {
         if (!value.HasValue)
@@ -1133,6 +1298,7 @@ public partial class OverlayViewModel : ObservableObject
         {
             HudDisplayItem.ShortWindow,
             HudDisplayItem.LongWindow,
+            HudDisplayItem.TokenUsage,
             HudDisplayItem.ResetCredits
         }
         .OrderBy(GetDisplayOrder)
@@ -1143,13 +1309,14 @@ public partial class OverlayViewModel : ObservableObject
     {
         HudDisplayItem.ShortWindow => _settings.ShortWindowOrder,
         HudDisplayItem.LongWindow => _settings.LongWindowOrder,
+        HudDisplayItem.TokenUsage => _settings.TokenUsageOrder,
         _ => _settings.ResetCreditsOrder
     };
 
     private bool CanMoveDisplayItem(HudDisplayItem item, bool moveUp)
     {
         var order = GetDisplayOrder(item);
-        return moveUp ? order > 0 : order < 2;
+        return moveUp ? order > 0 : order < 3;
     }
 
     private Task MoveDisplayItemAsync(HudDisplayItem item, bool moveUp, CancellationToken cancellationToken)
@@ -1169,6 +1336,7 @@ public partial class OverlayViewModel : ObservableObject
             {
                 ShortWindowOrder = ordered.IndexOf(HudDisplayItem.ShortWindow),
                 LongWindowOrder = ordered.IndexOf(HudDisplayItem.LongWindow),
+                TokenUsageOrder = ordered.IndexOf(HudDisplayItem.TokenUsage),
                 ResetCreditsOrder = ordered.IndexOf(HudDisplayItem.ResetCredits)
             },
             cancellationToken);
@@ -1178,6 +1346,7 @@ public partial class OverlayViewModel : ObservableObject
     {
         HudDisplayItem.ShortWindow => "短周期",
         HudDisplayItem.LongWindow => "长周期",
+        HudDisplayItem.TokenUsage => "Token 用量",
         _ => "重置次数"
     };
 
@@ -1185,6 +1354,7 @@ public partial class OverlayViewModel : ObservableObject
     {
         HudDisplayItem.ShortWindow => MoveShortWindowUpCommand,
         HudDisplayItem.LongWindow => MoveLongWindowUpCommand,
+        HudDisplayItem.TokenUsage => MoveTokenUsageUpCommand,
         _ => MoveResetCreditsUpCommand
     };
 
@@ -1192,6 +1362,7 @@ public partial class OverlayViewModel : ObservableObject
     {
         HudDisplayItem.ShortWindow => MoveShortWindowDownCommand,
         HudDisplayItem.LongWindow => MoveLongWindowDownCommand,
+        HudDisplayItem.TokenUsage => MoveTokenUsageDownCommand,
         _ => MoveResetCreditsDownCommand
     };
 
@@ -1266,6 +1437,11 @@ public partial class OverlayViewModel : ObservableObject
                 20 or 60 or 300 => settings.RefreshIntervalSeconds,
                 _ => 20
             },
+            TokenUsageRefreshIntervalSeconds = settings.TokenUsageRefreshIntervalSeconds switch
+            {
+                10 or 20 or 60 => settings.TokenUsageRefreshIntervalSeconds,
+                _ => 20
+            },
             FontSize = settings.FontSize switch
             {
                 14 or 16 or 18 or 20 or 22 or 24 => settings.FontSize,
@@ -1280,22 +1456,45 @@ public partial class OverlayViewModel : ObservableObject
             TextOpacityPercent = Math.Clamp((int)Math.Round(settings.TextOpacityPercent / 10d) * 10, 10, 100),
             ShortWindowOrder = settings.ShortWindowOrder,
             LongWindowOrder = settings.LongWindowOrder,
+            TokenUsageOrder = settings.TokenUsageOrder,
             ResetCreditsOrder = settings.ResetCreditsOrder,
             SettingsWindowWidth = settings.SettingsWindowWidth > 0d ? settings.SettingsWindowWidth : DefaultSettingsWindowWidth,
             SettingsWindowHeight = settings.SettingsWindowHeight > 0d ? settings.SettingsWindowHeight : DefaultSettingsWindowHeight
         };
 
-        var orderMap = GetNormalizedOrderMap(settings.ShortWindowOrder, settings.LongWindowOrder, settings.ResetCreditsOrder);
+        var orderMap = GetNormalizedOrderMap(
+            settings.ShortWindowOrder,
+            settings.LongWindowOrder,
+            settings.TokenUsageOrder,
+            settings.ResetCreditsOrder);
         normalized = normalized with
         {
             ShortWindowOrder = orderMap[HudDisplayItem.ShortWindow],
             LongWindowOrder = orderMap[HudDisplayItem.LongWindow],
+            TokenUsageOrder = orderMap[HudDisplayItem.TokenUsage],
             ResetCreditsOrder = orderMap[HudDisplayItem.ResetCredits]
         };
 
-        if (!normalized.ShowShortWindow && !normalized.ShowLongWindow && !normalized.ShowResetCredits)
+        if (!normalized.ShowShortWindow && !normalized.ShowLongWindow && !normalized.ShowTokenUsage && !normalized.ShowResetCredits)
         {
             normalized = normalized with { ShowShortWindow = true };
+        }
+
+        if (!normalized.ShowCurrentTokenUsage
+            && !normalized.ShowTodayTokenUsage
+            && !normalized.ShowCurrentPeriodTokenUsage)
+        {
+            normalized = normalized with { ShowTodayTokenUsage = true };
+        }
+
+        if (!Enum.IsDefined(normalized.TokenUsageDisplayFormat))
+        {
+            normalized = normalized with { TokenUsageDisplayFormat = TokenUsageDisplayFormat.Total };
+        }
+
+        if (!Enum.IsDefined(normalized.TokenUsageUnitFormat))
+        {
+            normalized = normalized with { TokenUsageUnitFormat = TokenUsageUnitFormat.Auto };
         }
 
         if (normalized.ShowShortWindow
@@ -1322,12 +1521,13 @@ public partial class OverlayViewModel : ObservableObject
         return normalized;
     }
 
-    private static Dictionary<HudDisplayItem, int> GetNormalizedOrderMap(int shortOrder, int longOrder, int resetOrder)
+    private static Dictionary<HudDisplayItem, int> GetNormalizedOrderMap(int shortOrder, int longOrder, int tokenOrder, int resetOrder)
     {
         var ordered = new List<(HudDisplayItem Item, int Order)>
         {
             (HudDisplayItem.ShortWindow, shortOrder),
             (HudDisplayItem.LongWindow, longOrder),
+            (HudDisplayItem.TokenUsage, tokenOrder),
             (HudDisplayItem.ResetCredits, resetOrder)
         }
         .OrderBy(entry => entry.Order)
@@ -1653,8 +1853,30 @@ public partial class OverlayViewModel : ObservableObject
         var count = 0;
         if (_settings.ShowShortWindow) count++;
         if (_settings.ShowLongWindow) count++;
+        if (_settings.ShowTokenUsage) count++;
         if (_settings.ShowResetCredits) count++;
         return count;
+    }
+
+    private int GetEnabledTokenUsageRangeCount()
+    {
+        var count = 0;
+        if (_settings.ShowCurrentTokenUsage) count++;
+        if (_settings.ShowTodayTokenUsage) count++;
+        if (_settings.ShowCurrentPeriodTokenUsage) count++;
+        return count;
+    }
+
+    private static int GetEffectiveRefreshIntervalSeconds(HudSettings settings)
+    {
+        var baseInterval = Math.Clamp(settings.RefreshIntervalSeconds, 5, 3600);
+        if (!settings.ShowTokenUsage)
+        {
+            return baseInterval;
+        }
+
+        var tokenInterval = Math.Clamp(settings.TokenUsageRefreshIntervalSeconds, 5, 3600);
+        return Math.Min(baseInterval, tokenInterval);
     }
 
     private async Task TryLaunchCodexOnStartupAsync(CancellationToken cancellationToken)

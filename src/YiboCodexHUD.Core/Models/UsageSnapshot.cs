@@ -22,5 +22,11 @@ public sealed record UsageSnapshot
 
     public IReadOnlyList<DateTimeOffset> ResetCreditExpirations { get; init; } = Array.Empty<DateTimeOffset>();
 
+    public TokenUsageRangeSnapshot? CurrentTokenUsage { get; init; }
+
+    public TokenUsageRangeSnapshot? TodayTokenUsage { get; init; }
+
+    public TokenUsageRangeSnapshot? CurrentPeriodTokenUsage { get; init; }
+
     public DateTimeOffset FetchedAt { get; init; }
 }

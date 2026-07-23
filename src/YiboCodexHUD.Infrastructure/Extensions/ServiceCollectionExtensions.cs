@@ -18,6 +18,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<CodexDesktopLauncher>();
         services.AddSingleton<CodexProtocolClient>();
         services.AddSingleton<RateLimitResetCreditWebService>();
+        services.AddSingleton<TokenUsageStateStore>();
+        services.AddSingleton<CodexTokenUsageLogReader>();
         services.AddSingleton<IRateLimitService, RateLimitService>();
         return services;
     }

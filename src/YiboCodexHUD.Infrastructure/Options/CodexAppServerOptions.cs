@@ -6,7 +6,7 @@ public sealed class CodexAppServerOptions
 
     public string ExecutablePath { get; set; } = "codex.exe";
 
-    public string Arguments { get; set; } = "app-server --stdio";
+    public string Arguments { get; set; } = "app-server";
 
     public string LaunchArguments { get; set; } = string.Empty;
 
