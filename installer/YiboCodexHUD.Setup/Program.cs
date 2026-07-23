@@ -220,11 +220,6 @@ internal static class Program
         {
             try
             {
-                if (!string.Equals(process.MainModule?.FileName, exePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
                 process.CloseMainWindow();
                 if (!process.WaitForExit(3000))
                 {
