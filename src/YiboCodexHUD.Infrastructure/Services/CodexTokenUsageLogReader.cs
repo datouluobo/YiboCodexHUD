@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using YiboCodexHUD.Core.Models;
@@ -7,7 +8,12 @@ namespace YiboCodexHUD.Infrastructure.Services;
 public sealed class CodexTokenUsageLogReader
 {
     private const int MaxSessionFilesToScan = 160;
+    private const int LogReadBufferLength = 8 * 1024;
+    private const int MaxRelevantLogLineLength = 64 * 1024;
     private readonly ILogger<CodexTokenUsageLogReader> _logger;
+    private readonly object _cacheLock = new();
+    private string? _cachedSourceStamp;
+    private TokenUsageRanges? _cachedRanges;
 
     public CodexTokenUsageLogReader(ILogger<CodexTokenUsageLogReader> logger)
     {
@@ -23,6 +29,18 @@ public sealed class CodexTokenUsageLogReader
             if (files.Length == 0)
             {
                 return TokenUsageRanges.Empty;
+            }
+
+            // The HUD refreshes much more often than Codex writes session logs.  Re-parsing
+            // every JSON line on each timer tick creates a large amount of short-lived LOH
+            // allocations and makes the process working set grow without bound in practice.
+            var sourceStamp = BuildSourceStamp(files, currentPeriodStartedAt, fetchedAt);
+            lock (_cacheLock)
+            {
+                if (string.Equals(_cachedSourceStamp, sourceStamp, StringComparison.Ordinal))
+                {
+                    return _cachedRanges!;
+                }
             }
 
             TokenUsageRangeSnapshot? latestCurrent = null;
@@ -44,17 +62,41 @@ public sealed class CodexTokenUsageLogReader
                 periodTotals.Add(fileStats.CurrentPeriod);
             }
 
-            return new TokenUsageRanges(
+            var ranges = new TokenUsageRanges(
                 latestCurrent,
                 todayTotals.ToSnapshot(),
                 periodTotals.ToSnapshot(),
                 null);
+
+            lock (_cacheLock)
+            {
+                _cachedSourceStamp = sourceStamp;
+                _cachedRanges = ranges;
+            }
+
+            return ranges;
         }
         catch (Exception exception)
         {
             _logger.LogInformation(exception, "Failed to read token usage from Codex session logs.");
             return TokenUsageRanges.Empty;
         }
+    }
+
+    private static string BuildSourceStamp(
+        IEnumerable<string> files,
+        DateTimeOffset? currentPeriodStartedAt,
+        DateTimeOffset fetchedAt)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.Append(currentPeriodStartedAt?.UtcTicks ?? 0).Append('|').Append(fetchedAt.ToLocalTime().Date.Ticks);
+        foreach (var path in files)
+        {
+            var info = new FileInfo(path);
+            builder.Append('|').Append(path).Append(':').Append(info.Length).Append(':').Append(info.LastWriteTimeUtc.Ticks);
+        }
+
+        return builder.ToString();
     }
 
     private static IEnumerable<string> EnumerateSessionFiles(DateTimeOffset? currentPeriodStartedAt, DateTimeOffset fetchedAt)
@@ -121,7 +163,7 @@ public sealed class CodexTokenUsageLogReader
         CancellationToken cancellationToken)
     {
         await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
+        using var reader = new BoundedLineReader(stream);
 
         TokenUsageRangeSnapshot? latestTotal = null;
         TokenUsageRangeSnapshot? previousTotal = null;
@@ -129,12 +171,17 @@ public sealed class CodexTokenUsageLogReader
         var todayTotals = new TokenUsageTotals();
         var periodTotals = new TokenUsageTotals();
 
-        while (!reader.EndOfStream)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var line = await reader.ReadLineAsync(cancellationToken);
-            if (string.IsNullOrWhiteSpace(line) || !line.Contains("\"token_count\"", StringComparison.Ordinal))
+            if (line is null)
+            {
+                break;
+            }
+
+            if (line.Length == 0 || !line.Contains("\"token_count\"", StringComparison.Ordinal))
             {
                 continue;
             }
@@ -170,6 +217,83 @@ public sealed class CodexTokenUsageLogReader
         }
 
         return new SessionTokenUsageStats(latestTotal, latestTimestamp, todayTotals, periodTotals);
+    }
+
+    /// <summary>
+    /// Reads JSONL safely when a session contains a very large assistant message. StreamReader.ReadLineAsync
+    /// grows its internal character buffer to fit the entire line; the shared array pool then retains that
+    /// buffer for the lifetime of the process. Token-count records are compact, so oversized lines can be
+    /// discarded without affecting usage calculations.
+    /// </summary>
+    private sealed class BoundedLineReader : IDisposable
+    {
+        private readonly StreamReader _reader;
+        private readonly char[] _buffer = new char[LogReadBufferLength];
+        private int _bufferOffset;
+        private int _bufferCount;
+
+        public BoundedLineReader(Stream stream)
+        {
+            _reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: LogReadBufferLength, leaveOpen: true);
+        }
+
+        public async ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            var line = new StringBuilder(Math.Min(LogReadBufferLength, MaxRelevantLogLineLength));
+            var discardLine = false;
+            var hasCharacters = false;
+
+            while (true)
+            {
+                if (_bufferOffset == _bufferCount)
+                {
+                    _bufferCount = await _reader.ReadAsync(_buffer.AsMemory(), cancellationToken);
+                    _bufferOffset = 0;
+                    if (_bufferCount == 0)
+                    {
+                        if (!hasCharacters)
+                        {
+                            return null;
+                        }
+
+                        return discardLine ? string.Empty : TrimTrailingCarriageReturn(line);
+                    }
+                }
+
+                var character = _buffer[_bufferOffset++];
+                hasCharacters = true;
+                if (character == '\n')
+                {
+                    return discardLine ? string.Empty : TrimTrailingCarriageReturn(line);
+                }
+
+                if (discardLine)
+                {
+                    continue;
+                }
+
+                if (line.Length >= MaxRelevantLogLineLength)
+                {
+                    discardLine = true;
+                    line.Clear();
+                    continue;
+                }
+
+                line.Append(character);
+            }
+        }
+
+        private static string TrimTrailingCarriageReturn(StringBuilder line)
+        {
+            if (line.Length > 0 && line[^1] == '\r')
+            {
+                line.Length--;
+            }
+
+            return line.ToString();
+        }
+
+        public void Dispose() => _reader.Dispose();
     }
 
     private static bool TryParseTokenCountLine(

@@ -15,6 +15,10 @@ namespace YiboCodexHUD.Infrastructure.Services;
 
 public sealed class RateLimitResetCreditWebService
 {
+    // Reset credits change rarely.  Keep this fallback independent from the HUD's
+    // rate-limit refresh cadence so a lightweight overlay never repeatedly scans
+    // Chromium profile data while it is running.
+    private static readonly TimeSpan CacheRefreshInterval = TimeSpan.FromHours(6);
     private const string ResetCreditsEndpoint = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
     private const int BlockFileHeaderSize = 8192;
     private const int EntryStoreSize = 256;
@@ -27,6 +31,9 @@ public sealed class RateLimitResetCreditWebService
     };
 
     private readonly ILogger<RateLimitResetCreditWebService> _logger;
+    private readonly SemaphoreSlim _fetchGate = new(1, 1);
+    private DateTimeOffset _lastFetchAttemptAt = DateTimeOffset.MinValue;
+    private CodexRateLimitResetCredits? _cachedResetCredits;
 
     public RateLimitResetCreditWebService(ILogger<RateLimitResetCreditWebService> logger)
     {
@@ -34,6 +41,29 @@ public sealed class RateLimitResetCreditWebService
     }
 
     internal async Task<CodexRateLimitResetCredits?> TryFetchAsync(CancellationToken cancellationToken)
+    {
+        // Reading Chromium cache and copying/decrypting its cookie database is expensive.
+        // Cache unsuccessful attempts too: otherwise an account without reset-credit data
+        // repeats the full scan on every HUD refresh.
+        await _fetchGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (DateTimeOffset.UtcNow - _lastFetchAttemptAt < CacheRefreshInterval)
+            {
+                return _cachedResetCredits;
+            }
+
+            _lastFetchAttemptAt = DateTimeOffset.UtcNow;
+            _cachedResetCredits = await TryFetchCoreAsync(cancellationToken);
+            return _cachedResetCredits;
+        }
+        finally
+        {
+            _fetchGate.Release();
+        }
+    }
+
+    private async Task<CodexRateLimitResetCredits?> TryFetchCoreAsync(CancellationToken cancellationToken)
     {
         foreach (var profileDirectory in CodexDesktopIdentity.GetProfileDirectoryCandidates())
         {

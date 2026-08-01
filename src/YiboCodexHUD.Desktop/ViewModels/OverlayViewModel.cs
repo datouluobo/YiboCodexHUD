@@ -13,7 +13,7 @@ using YiboCodexHUD.Infrastructure.Services;
 
 namespace YiboCodexHUD.Desktop.ViewModels;
 
-public partial class OverlayViewModel : ObservableObject
+public partial class OverlayViewModel : ObservableObject, IDisposable
 {
     private const int PositionNudgeStepPx = 2;
     private const int MaxPositionOffsetPx = 240;
@@ -37,6 +37,7 @@ public partial class OverlayViewModel : ObservableObject
     private readonly ILogger<OverlayViewModel> _logger;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly SemaphoreSlim _settingsGate = new(1, 1);
+    private readonly CancellationTokenSource _shutdownCts = new();
     private HudSettings _settings = new();
     private UsageSnapshot? _latestSnapshot;
     private IReadOnlyList<StyledDisplaySegment> _displaySegments = Array.Empty<StyledDisplaySegment>();
@@ -215,7 +216,7 @@ public partial class OverlayViewModel : ObservableObject
         }
 
         _refreshLoopStarted = true;
-        _ = Task.Run(RunRefreshLoopAsync);
+        _ = Task.Run(() => RunRefreshLoopAsync(_shutdownCts.Token));
     }
 
     public void ApplySettingsWindowBounds(Window window)
@@ -247,9 +248,9 @@ public partial class OverlayViewModel : ObservableObject
             cancellationToken);
     }
 
-    private async Task RunRefreshLoopAsync()
+    private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
     {
-        while (true)
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
@@ -257,20 +258,32 @@ public partial class OverlayViewModel : ObservableObject
                     ? TimeSpan.FromSeconds(GetEffectiveRefreshIntervalSeconds(_settings))
                     : TimeSpan.FromMilliseconds(500);
 
-                await Task.Delay(delay);
+                await Task.Delay(delay, cancellationToken);
 
                 if (!_settings.AutoRefreshEnabled)
                 {
                     continue;
                 }
 
-                await RefreshAsync();
+                await RefreshAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
             }
             catch (Exception exception)
             {
                 _logger.LogDebug(exception, "Background refresh loop iteration failed.");
             }
         }
+    }
+
+    public void Dispose()
+    {
+        _shutdownCts.Cancel();
+        _shutdownCts.Dispose();
+        _refreshGate.Dispose();
+        _settingsGate.Dispose();
     }
 
     private async Task RefreshAsync(CancellationToken cancellationToken = default)

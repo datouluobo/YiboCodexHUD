@@ -12,10 +12,10 @@
     <Authors>YiboSoft</Authors>
     <Company>YiboSoft</Company>
     <Product>YiboCodexHUD</Product>
-    <Version>1.0.6</Version>
-    <FileVersion>1.0.6.0</FileVersion>
-    <AssemblyVersion>1.0.6.0</AssemblyVersion>
-    <InformationalVersion>1.0.6</InformationalVersion>
+    <Version>1.0.8</Version>
+    <FileVersion>1.0.8.0</FileVersion>
+    <AssemblyVersion>1.0.8.0</AssemblyVersion>
+    <InformationalVersion>1.0.8</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 

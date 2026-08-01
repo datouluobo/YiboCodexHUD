@@ -174,7 +174,7 @@ internal static class Program
             throw new InvalidOperationException("Failed to create uninstall registry key.");
         }
 
-        var version = FileVersionInfo.GetVersionInfo(exePath).ProductVersion ?? "1.0.6";
+        var version = FileVersionInfo.GetVersionInfo(exePath).ProductVersion ?? "1.0.8";
 
         key.SetValue("DisplayName", AppName);
         key.SetValue("DisplayVersion", version);
