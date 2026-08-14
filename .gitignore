@@ -4,6 +4,7 @@ obj/
 .vscode/
 .tmp/
 dist/
+ROADMAP.md
 
 *.user
 *.suo
