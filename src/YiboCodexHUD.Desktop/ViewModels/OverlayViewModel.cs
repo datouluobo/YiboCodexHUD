@@ -23,6 +23,8 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     private const string DefaultLowRemainingColorHex = "#FFC24A3A";
     private const double DefaultSettingsWindowWidth = 620d;
     private const double DefaultSettingsWindowHeight = 820d;
+    private const int ExpiryDayRefreshIntervalSeconds = 120;
+    private static readonly TimeZoneInfo BeijingTimeZone = ResolveBeijingTimeZone();
 
     private static readonly JsonSerializerOptions ImportExportSerializerOptions = new()
     {
@@ -255,7 +257,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
             try
             {
                 var delay = _settings.AutoRefreshEnabled
-                    ? TimeSpan.FromSeconds(GetEffectiveRefreshIntervalSeconds(_settings))
+                    ? GetRefreshDelay(_settings, _latestSnapshot, DateTimeOffset.UtcNow)
                     : TimeSpan.FromMilliseconds(500);
 
                 await Task.Delay(delay, cancellationToken);
@@ -1142,10 +1144,12 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
 
     private static string FormatResetCreditExpiration(DateTimeOffset expiration, bool compact)
     {
-        var localExpiration = expiration.ToLocalTime();
-        return compact
-            ? $"{localExpiration.Month}/{localExpiration.Day}"
-            : $"{localExpiration.Month}/{localExpiration.Day}";
+        var beijingExpiration = TimeZoneInfo.ConvertTime(expiration, BeijingTimeZone);
+        var date = $"{beijingExpiration.Month}/{beijingExpiration.Day}";
+        var hasSpecificTime = beijingExpiration.TimeOfDay != TimeSpan.Zero;
+        return hasSpecificTime
+            ? $"{date} {beijingExpiration:HH:mm}"
+            : date;
     }
 
     private string BuildMinimalDisplayText(string shortWindowCompact, IReadOnlyList<string> compactSegments)
@@ -1880,16 +1884,72 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         return count;
     }
 
-    private static int GetEffectiveRefreshIntervalSeconds(HudSettings settings)
+    private static TimeSpan GetRefreshDelay(
+        HudSettings settings,
+        UsageSnapshot? snapshot,
+        DateTimeOffset utcNow)
     {
         var baseInterval = Math.Clamp(settings.RefreshIntervalSeconds, 5, 3600);
-        if (!settings.ShowTokenUsage)
+        var effectiveInterval = !settings.ShowTokenUsage
+            ? baseInterval
+            : Math.Min(baseInterval, Math.Clamp(settings.TokenUsageRefreshIntervalSeconds, 5, 3600));
+
+        if (!HasAvailableCreditExpiringToday(snapshot, utcNow))
         {
-            return baseInterval;
+            var nextExpiryDayStart = GetNextExpiryDayStart(snapshot, utcNow);
+            if (!nextExpiryDayStart.HasValue)
+            {
+                return TimeSpan.FromSeconds(effectiveInterval);
+            }
+
+            return TimeSpan.FromSeconds(Math.Min(
+                effectiveInterval,
+                Math.Max(1d, (nextExpiryDayStart.Value - utcNow).TotalSeconds)));
         }
 
-        var tokenInterval = Math.Clamp(settings.TokenUsageRefreshIntervalSeconds, 5, 3600);
-        return Math.Min(baseInterval, tokenInterval);
+        return TimeSpan.FromSeconds(Math.Min(effectiveInterval, ExpiryDayRefreshIntervalSeconds));
+    }
+
+    private static bool HasAvailableCreditExpiringToday(UsageSnapshot? snapshot, DateTimeOffset utcNow)
+    {
+        if (snapshot?.ResetCreditsAvailable is not > 0)
+        {
+            return false;
+        }
+
+        var today = TimeZoneInfo.ConvertTime(utcNow, BeijingTimeZone).Date;
+        return snapshot.ResetCreditExpirations.Any(expiration =>
+            TimeZoneInfo.ConvertTime(expiration, BeijingTimeZone).Date == today);
+    }
+
+    private static DateTimeOffset? GetNextExpiryDayStart(UsageSnapshot? snapshot, DateTimeOffset utcNow)
+    {
+        if (snapshot?.ResetCreditsAvailable is not > 0)
+        {
+            return null;
+        }
+
+        var beijingNow = TimeZoneInfo.ConvertTime(utcNow, BeijingTimeZone);
+        var tomorrow = beijingNow.Date.AddDays(1);
+        if (!snapshot.ResetCreditExpirations.Any(expiration =>
+                TimeZoneInfo.ConvertTime(expiration, BeijingTimeZone).Date == tomorrow))
+        {
+            return null;
+        }
+
+        return new DateTimeOffset(tomorrow, BeijingTimeZone.GetUtcOffset(tomorrow));
+    }
+
+    private static TimeZoneInfo ResolveBeijingTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("China Standard Time");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return TimeZoneInfo.CreateCustomTimeZone("Beijing", TimeSpan.FromHours(8), "Beijing", "Beijing");
+        }
     }
 
     private async Task TryLaunchCodexOnStartupAsync(CancellationToken cancellationToken)

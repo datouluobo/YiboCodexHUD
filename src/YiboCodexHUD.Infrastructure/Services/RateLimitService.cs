@@ -58,8 +58,8 @@ public sealed class RateLimitService : IRateLimitService
                         await _resetCreditWebService.TryFetchAsync(cancellationToken));
                 }
 
-                var resetCreditExpirations = GetResetCreditExpirations(resetCredits);
-                var resetCreditsAvailable = GetResetCreditsAvailable(resetCredits, resetCreditExpirations);
+                var resetCreditExpirations = GetResetCreditExpirations(resetCredits, fetchedAt);
+                var resetCreditsAvailable = GetResetCreditsAvailable(resetCredits, resetCreditExpirations, fetchedAt);
 
                 if (resetCredits is null && !_hasLoggedMissingResetCredits)
                 {
@@ -593,7 +593,8 @@ public sealed class RateLimitService : IRateLimitService
 
     private static int? GetResetCreditsAvailable(
         CodexRateLimitResetCredits? resetCredits,
-        IReadOnlyList<DateTimeOffset> resetCreditExpirations)
+        IReadOnlyList<DateTimeOffset> resetCreditExpirations,
+        DateTimeOffset fetchedAt)
     {
         if (resetCredits is null)
         {
@@ -606,17 +607,20 @@ public sealed class RateLimitService : IRateLimitService
             return reportedAvailableCount ?? (resetCreditExpirations.Count > 0 ? resetCreditExpirations.Count : null);
         }
 
-        var availableCredits = resetCredits.Credits.Count(static credit =>
-            string.IsNullOrWhiteSpace(credit.Status)
-            || string.Equals(credit.Status, "available", StringComparison.OrdinalIgnoreCase));
+        var availableCredits = resetCredits.Credits.Count(credit =>
+            IsAvailableResetCredit(credit)
+            && !IsExpiredResetCredit(credit, fetchedAt));
 
-        var listAvailableCount = availableCredits > 0
-            ? availableCredits
-            : resetCreditExpirations.Count > 0
-                ? resetCreditExpirations.Count
-                : resetCredits.Credits.Count;
+        // A detailed credit list is authoritative. Do not fall back to a stale
+        // aggregate count when every listed credit has already expired.
+        if (availableCredits == 0)
+        {
+            return null;
+        }
 
-        return listAvailableCount > 0 ? listAvailableCount : reportedAvailableCount;
+        var listAvailableCount = availableCredits;
+
+        return listAvailableCount;
     }
 
     private static bool HasCreditRows(CodexRateLimitResetCredits? resetCredits) =>
@@ -626,6 +630,13 @@ public sealed class RateLimitService : IRateLimitService
         CodexRateLimitResetCredits? primary,
         CodexRateLimitResetCredits? fallback)
     {
+        // A live zero count means the credit was used or has expired. It must not
+        // be replaced by an older detailed response from the browser cache.
+        if (HasReportedNoResetCredits(primary))
+        {
+            return primary;
+        }
+
         if (fallback is null)
         {
             return primary;
@@ -639,7 +650,12 @@ public sealed class RateLimitService : IRateLimitService
         return primary ?? fallback;
     }
 
-    private static IReadOnlyList<DateTimeOffset> GetResetCreditExpirations(CodexRateLimitResetCredits? resetCredits)
+    private static bool HasReportedNoResetCredits(CodexRateLimitResetCredits? resetCredits) =>
+        (resetCredits?.AvailableCount ?? resetCredits?.SnakeCaseAvailableCount) == 0;
+
+    private static IReadOnlyList<DateTimeOffset> GetResetCreditExpirations(
+        CodexRateLimitResetCredits? resetCredits,
+        DateTimeOffset fetchedAt)
     {
         if (resetCredits?.Credits is null || resetCredits.Credits.Count == 0)
         {
@@ -650,6 +666,7 @@ public sealed class RateLimitService : IRateLimitService
             .Select(GetResetCreditExpiration)
             .Where(static value => value.HasValue)
             .Select(static value => value!.Value)
+            .Where(expiration => expiration > fetchedAt)
             .Distinct()
             .OrderBy(static value => value)
             .ToArray();
@@ -683,6 +700,13 @@ public sealed class RateLimitService : IRateLimitService
 
         return null;
     }
+
+    private static bool IsAvailableResetCredit(CodexRateLimitResetCredit credit) =>
+        string.IsNullOrWhiteSpace(credit.Status)
+        || string.Equals(credit.Status, "available", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsExpiredResetCredit(CodexRateLimitResetCredit credit, DateTimeOffset fetchedAt) =>
+        GetResetCreditExpiration(credit) is { } expiration && expiration <= fetchedAt;
 
     private static bool TryParseDateTimeOffset(string? rawValue, out DateTimeOffset value)
     {
