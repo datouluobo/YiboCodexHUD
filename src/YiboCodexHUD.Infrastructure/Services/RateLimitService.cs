@@ -601,13 +601,14 @@ public sealed class RateLimitService : IRateLimitService
             return null;
         }
 
-        var reportedAvailableCount = resetCredits.AvailableCount ?? resetCredits.SnakeCaseAvailableCount;
-        if (resetCredits.Credits is null || resetCredits.Credits.Count == 0)
+        var reportedAvailableCount = GetReportedAvailableCount(resetCredits);
+        var creditRows = GetCreditRows(resetCredits);
+        if (creditRows.Count == 0)
         {
             return reportedAvailableCount ?? (resetCreditExpirations.Count > 0 ? resetCreditExpirations.Count : null);
         }
 
-        var availableCredits = resetCredits.Credits.Count(credit =>
+        var availableCredits = creditRows.Count(credit =>
             IsAvailableResetCredit(credit)
             && !IsExpiredResetCredit(credit, fetchedAt));
 
@@ -624,7 +625,7 @@ public sealed class RateLimitService : IRateLimitService
     }
 
     private static bool HasCreditRows(CodexRateLimitResetCredits? resetCredits) =>
-        resetCredits?.Credits is { Count: > 0 };
+        GetCreditRows(resetCredits).Count > 0;
 
     private static CodexRateLimitResetCredits? PreferDetailedResetCredits(
         CodexRateLimitResetCredits? primary,
@@ -651,18 +652,19 @@ public sealed class RateLimitService : IRateLimitService
     }
 
     private static bool HasReportedNoResetCredits(CodexRateLimitResetCredits? resetCredits) =>
-        (resetCredits?.AvailableCount ?? resetCredits?.SnakeCaseAvailableCount) == 0;
+        GetReportedAvailableCount(resetCredits) == 0;
 
     private static IReadOnlyList<DateTimeOffset> GetResetCreditExpirations(
         CodexRateLimitResetCredits? resetCredits,
         DateTimeOffset fetchedAt)
     {
-        if (resetCredits?.Credits is null || resetCredits.Credits.Count == 0)
+        var creditRows = GetCreditRows(resetCredits);
+        if (creditRows.Count == 0)
         {
             return Array.Empty<DateTimeOffset>();
         }
 
-        return resetCredits.Credits
+        return creditRows
             .Select(GetResetCreditExpiration)
             .Where(static value => value.HasValue)
             .Select(static value => value!.Value)
@@ -670,6 +672,37 @@ public sealed class RateLimitService : IRateLimitService
             .Distinct()
             .OrderBy(static value => value)
             .ToArray();
+    }
+
+    private static int? GetReportedAvailableCount(CodexRateLimitResetCredits? resetCredits)
+    {
+        if (resetCredits is null)
+        {
+            return null;
+        }
+
+        return resetCredits.AvailableCount
+            ?? resetCredits.SnakeCaseAvailableCount
+            ?? GetReportedAvailableCount(resetCredits.Summary)
+            ?? GetReportedAvailableCount(resetCredits.Details);
+    }
+
+    private static IReadOnlyList<CodexRateLimitResetCredit> GetCreditRows(CodexRateLimitResetCredits? resetCredits)
+    {
+        if (resetCredits is null)
+        {
+            return Array.Empty<CodexRateLimitResetCredit>();
+        }
+
+        if (resetCredits.Credits is { Count: > 0 } credits)
+        {
+            return credits;
+        }
+
+        var detailedRows = GetCreditRows(resetCredits.Details);
+        return detailedRows.Count > 0
+            ? detailedRows
+            : GetCreditRows(resetCredits.Summary);
     }
 
     private static DateTimeOffset? GetResetCreditExpiration(CodexRateLimitResetCredit credit)
