@@ -9,7 +9,7 @@ internal sealed class CodexRateLimitResetCredit
 
     public string? Status { get; init; }
 
-    public string? ExpiresAt { get; init; }
+    public JsonElement ExpiresAt { get; init; }
 
     [JsonExtensionData]
     public IDictionary<string, JsonElement>? ExtensionData { get; init; }

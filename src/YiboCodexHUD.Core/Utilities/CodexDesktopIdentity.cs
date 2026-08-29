@@ -54,6 +54,27 @@ public static class CodexDesktopIdentity
             }
         }
 
+        // The desktop app keeps the current CLI in a versioned directory under
+        // LocalAppData. Discover it directly because applications launched by
+        // Explorer do not necessarily inherit the PATH used by a terminal.
+        foreach (var candidate in EnumerateInstalledCliCandidates())
+        {
+            if (yielded.Add(candidate))
+            {
+                yield return candidate;
+            }
+        }
+
+        // Prefer a standalone CLI on PATH over a packaged LocalCache copy, which
+        // can remain at an older protocol version after the desktop app updates.
+        foreach (var candidate in EnumeratePathResolvedCandidates("codex.exe"))
+        {
+            if (yielded.Add(candidate))
+            {
+                yield return candidate;
+            }
+        }
+
         foreach (var candidate in EnumeratePackagedExecutableCandidates())
         {
             if (yielded.Add(candidate))
@@ -65,6 +86,41 @@ public static class CodexDesktopIdentity
         foreach (var candidate in EnumerateBareExecutableCandidates(configuredPath))
         {
             if (yielded.Add(candidate))
+            {
+                yield return candidate;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateInstalledCliCandidates()
+    {
+        var binDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "OpenAI",
+            "Codex",
+            "bin");
+
+        if (!Directory.Exists(binDirectory))
+        {
+            yield break;
+        }
+
+        IEnumerable<string> versionDirectories;
+        try
+        {
+            versionDirectories = Directory
+                .EnumerateDirectories(binDirectory)
+                .OrderByDescending(Directory.GetLastWriteTimeUtc);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var versionDirectory in versionDirectories)
+        {
+            var candidate = Path.Combine(versionDirectory, "codex.exe");
+            if (File.Exists(candidate))
             {
                 yield return candidate;
             }

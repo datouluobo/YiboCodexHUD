@@ -142,7 +142,7 @@ public partial class OverlayWindow : Window
 
     private void OnExitMenuItemClick(object sender, RoutedEventArgs e)
     {
-        Application.Current.Shutdown();
+        App.RequestShutdown();
     }
 
     private void OnOpenSettingsMenuItemClick(object sender, RoutedEventArgs e)

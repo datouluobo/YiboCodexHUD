@@ -37,6 +37,7 @@ public sealed class CodexAppServerProcess
         {
             FileName = executablePath,
             Arguments = _options.Arguments,
+            WorkingDirectory = ResolveWorkingDirectory(),
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -56,6 +57,19 @@ public sealed class CodexAppServerProcess
             ?? throw new InvalidOperationException("Failed to start Codex/ChatGPT app-server process.");
 
         return Task.FromResult(_process);
+    }
+
+    private static string ResolveWorkingDirectory()
+    {
+        var userProfileDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var codexHomeDirectory = Path.Combine(userProfileDirectory, ".codex");
+
+        // The Codex app-server resolves the signed-in desktop context from this
+        // directory. Starting it from the HUD install directory can cause the
+        // rate-limit endpoint to reject the request.
+        return Directory.Exists(codexHomeDirectory)
+            ? codexHomeDirectory
+            : userProfileDirectory;
     }
 
     public void Stop()

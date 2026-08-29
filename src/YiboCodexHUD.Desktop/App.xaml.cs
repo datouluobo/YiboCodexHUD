@@ -17,6 +17,23 @@ public partial class App : Application
     private static Mutex? _singleInstanceMutex;
     private static bool _ownsSingleInstanceMutex;
     private IHost? _host;
+    private bool _cleanupCompleted;
+
+    public static bool IsShutdownRequested { get; private set; }
+
+    public static void RequestShutdown()
+    {
+        IsShutdownRequested = true;
+
+        // Hidden WPF windows still keep the process alive. Close every window
+        // explicitly before shutting down so the HUD cannot remain headless.
+        foreach (Window window in Current.Windows.Cast<Window>().ToArray())
+        {
+            window.Close();
+        }
+
+        Current.Shutdown();
+    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -40,6 +57,12 @@ public partial class App : Application
             .ConfigureLogging(logging =>
             {
                 logging.ClearProviders();
+                logging.SetMinimumLevel(LogLevel.Debug);
+                logging.AddSimpleConsole(options =>
+                {
+                    options.SingleLine = true;
+                    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff ";
+                });
                 logging.AddDebug();
             })
             .ConfigureServices((context, services) =>
@@ -62,12 +85,26 @@ public partial class App : Application
         _ = _host.Services.GetRequiredService<OverlayViewModel>().InitializeAsync();
     }
 
-    protected override async void OnExit(ExitEventArgs e)
+    protected override void OnExit(ExitEventArgs e)
     {
+        IsShutdownRequested = true;
+        CleanupApplicationResources();
+        base.OnExit(e);
+    }
+
+    private void CleanupApplicationResources()
+    {
+        if (_cleanupCompleted)
+        {
+            return;
+        }
+
+        _cleanupCompleted = true;
         if (_host is not null)
         {
-            await _host.StopAsync();
+            _host.StopAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
             _host.Dispose();
+            _host = null;
         }
 
         if (_ownsSingleInstanceMutex)
@@ -78,7 +115,5 @@ public partial class App : Application
         _singleInstanceMutex?.Dispose();
         _singleInstanceMutex = null;
         _ownsSingleInstanceMutex = false;
-
-        base.OnExit(e);
     }
 }

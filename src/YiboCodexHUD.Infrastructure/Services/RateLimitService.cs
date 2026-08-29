@@ -385,8 +385,7 @@ public sealed class RateLimitService : IRateLimitService
                 continue;
             }
 
-            if (value.ValueKind == System.Text.Json.JsonValueKind.String
-                && TryParseDateTimeOffset(value.GetString(), out expiration))
+            if (TryParseDateTimeOffset(value, out expiration))
             {
                 return expiration;
             }
@@ -402,16 +401,46 @@ public sealed class RateLimitService : IRateLimitService
     private static bool IsExpiredResetCredit(CodexRateLimitResetCredit credit, DateTimeOffset fetchedAt) =>
         GetResetCreditExpiration(credit) is { } expiration && expiration <= fetchedAt;
 
-    private static bool TryParseDateTimeOffset(string? rawValue, out DateTimeOffset value)
+    private static bool TryParseDateTimeOffset(JsonElement rawValue, out DateTimeOffset value)
     {
-        if (string.IsNullOrWhiteSpace(rawValue))
+        if (rawValue.ValueKind == JsonValueKind.Number
+            && rawValue.TryGetInt64(out var unixSeconds))
+        {
+            try
+            {
+                value = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+                return true;
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                value = default;
+                return false;
+            }
+        }
+
+        if (rawValue.ValueKind != JsonValueKind.String)
         {
             value = default;
             return false;
         }
 
+        var textValue = rawValue.GetString();
+        if (long.TryParse(textValue, out unixSeconds))
+        {
+            try
+            {
+                value = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+                return true;
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                value = default;
+                return false;
+            }
+        }
+
         return DateTimeOffset.TryParse(
-            rawValue,
+            textValue,
             System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
             out value);

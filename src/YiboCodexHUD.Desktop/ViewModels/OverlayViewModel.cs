@@ -24,6 +24,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     private const double DefaultSettingsWindowWidth = 620d;
     private const double DefaultSettingsWindowHeight = 820d;
     private const int ExpiryDayRefreshIntervalSeconds = 120;
+    private const int InitialFailureRetryIntervalSeconds = 5;
     private static readonly TimeZoneInfo BeijingTimeZone = ResolveBeijingTimeZone();
 
     private static readonly JsonSerializerOptions ImportExportSerializerOptions = new()
@@ -256,13 +257,19 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         {
             try
             {
-                var delay = _settings.AutoRefreshEnabled
-                    ? GetRefreshDelay(_settings, _latestSnapshot, DateTimeOffset.UtcNow)
-                    : TimeSpan.FromMilliseconds(500);
+                // A failed first request must be self-healing even when the user has
+                // disabled normal auto-refresh. Otherwise the startup error remains
+                // on screen forever after a transient app-server failure.
+                var waitingForFirstSnapshot = !_hasSnapshot;
+                var delay = waitingForFirstSnapshot
+                    ? TimeSpan.FromSeconds(InitialFailureRetryIntervalSeconds)
+                    : _settings.AutoRefreshEnabled
+                        ? GetRefreshDelay(_settings, _latestSnapshot, DateTimeOffset.UtcNow)
+                        : TimeSpan.FromMilliseconds(500);
 
                 await Task.Delay(delay, cancellationToken);
 
-                if (!_settings.AutoRefreshEnabled)
+                if (!waitingForFirstSnapshot && !_settings.AutoRefreshEnabled)
                 {
                     continue;
                 }

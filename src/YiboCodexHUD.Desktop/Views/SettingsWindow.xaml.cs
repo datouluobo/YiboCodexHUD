@@ -153,8 +153,19 @@ public partial class SettingsWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (App.IsShutdownRequested)
+        {
+            base.OnClosing(e);
+            return;
+        }
+
+        // Closing Settings is not the same as exiting the HUD. Keep this
+        // singleton window alive so it can be opened again from the overlay;
+        // the overlay's explicit Exit action performs full process cleanup.
         e.Cancel = true;
+        _persistBoundsTimer.Stop();
         Hide();
+        base.OnClosing(e);
     }
 
     private void OnClosed(object? sender, EventArgs e)
