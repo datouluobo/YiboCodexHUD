@@ -348,8 +348,8 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         var longWindowSegments = BuildUsageWindowSegments(
             snapshot.LongWindowMinutes,
             snapshot.LongWindowUsedPercent,
-            FormatResetDate(snapshot.LongWindowResetsAt),
-            FormatCompactResetDate(snapshot.LongWindowResetsAt),
+            FormatLongResetDate(snapshot.LongWindowResetsAt, snapshot.FetchedAt),
+            FormatCompactLongResetDate(snapshot.LongWindowResetsAt, snapshot.FetchedAt),
             snapshot.LongWindowResetsAt.HasValue,
             _settings.ShowLongWindowLabel,
             _settings.ShowLongRemainingPercent,
@@ -1234,7 +1234,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         return value.Value.ToLocalTime().ToString("HH:mm");
     }
 
-    private static string FormatResetDate(DateTimeOffset? value)
+    private static string FormatLongResetDate(DateTimeOffset? value, DateTimeOffset fetchedAt)
     {
         if (!value.HasValue)
         {
@@ -1242,10 +1242,12 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         }
 
         var local = value.Value.ToLocalTime();
-        return $"{local.Month}月{local.Day}日";
+        return IsResetWithinNextDay(value.Value, fetchedAt)
+            ? $"{local:yyyy年M月d日 HH:mm}"
+            : $"{local.Month}月{local.Day}日";
     }
 
-    private static string FormatCompactResetDate(DateTimeOffset? value)
+    private static string FormatCompactLongResetDate(DateTimeOffset? value, DateTimeOffset fetchedAt)
     {
         if (!value.HasValue)
         {
@@ -1253,7 +1255,15 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         }
 
         var local = value.Value.ToLocalTime();
-        return $"{local.Month}/{local.Day}";
+        return IsResetWithinNextDay(value.Value, fetchedAt)
+            ? $"{local:M/d HH:mm}"
+            : $"{local.Month}/{local.Day}";
+    }
+
+    private static bool IsResetWithinNextDay(DateTimeOffset resetAt, DateTimeOffset fetchedAt)
+    {
+        var timeUntilReset = resetAt - fetchedAt;
+        return timeUntilReset > TimeSpan.Zero && timeUntilReset <= TimeSpan.FromDays(1);
     }
 
     private static string FormatErrorMessage(Exception exception)

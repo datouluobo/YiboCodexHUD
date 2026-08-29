@@ -31,10 +31,10 @@
     <Authors>YiboSoft</Authors>
     <Company>YiboSoft</Company>
     <Product>YiboCodexHUD</Product>
-    <Version>1.0.10</Version>
-    <FileVersion>1.0.10.0</FileVersion>
-    <AssemblyVersion>1.0.10.0</AssemblyVersion>
-    <InformationalVersion>1.0.10</InformationalVersion>
+    <Version>1.0.11</Version>
+    <FileVersion>1.0.11.0</FileVersion>
+    <AssemblyVersion>1.0.11.0</AssemblyVersion>
+    <InformationalVersion>1.0.11</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
     <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
