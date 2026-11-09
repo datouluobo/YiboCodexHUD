@@ -2,295 +2,468 @@
         x:Name="RootWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:YiboCodexHUD.Desktop.Views"
+        xmlns:models="clr-namespace:YiboCodexHUD.Core.Models;assembly=YiboCodexHUD.Core"
         Title="YiboCodexHUD 设置"
         Width="620"
-        Height="820"
+        Height="700"
         MinWidth="560"
         MinHeight="700"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
-        Background="#FFF6F6F4">
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+        UseLayoutRounding="True"
+        Background="#FAFBFC"
+        Foreground="#171A1F"
+        FontSize="14">
+    <Window.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#0068CE" />
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#535962" />
+        <SolidColorBrush x:Key="DividerBrush" Color="#D8DCE2" />
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
 
-        <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <Style x:Key="SettingsTab" TargetType="TabItem">
+            <Setter Property="Padding" Value="14,14" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabBorder"
+                                Padding="{TemplateBinding Padding}"
+                                BorderThickness="0,0,0,3"
+                                BorderBrush="Transparent"
+                                Background="Transparent">
+                            <ContentPresenter x:Name="TabHeader" ContentSource="Header" RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="#EEF2F7" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="TabHeader" Property="TextElement.FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <StackPanel Grid.Column="0">
-                <TextBlock FontSize="24"
-                           FontWeight="SemiBold"
-                           Foreground="#1E1E1C"
-                           Text="设置" />
-                <TextBlock Margin="0,8,0,0"
-                           Foreground="#5B5B57"
-                           Text="按主题分组到标签页里，常用项会更容易找到。"
-                           TextWrapping="Wrap" />
-                <TextBlock Margin="0,8,0,0"
-                           Foreground="#7A756C"
-                           Text="{Binding AppVersionText, ElementName=RootWindow}" />
-            </StackPanel>
+        <Style x:Key="RowButton" TargetType="ButtonBase">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#A4ACB7" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ButtonBase">
+                        <Border x:Name="ButtonBorder"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#EBF2FA" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#DAE9F9" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#F2F4F6" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#DFE3E8" />
+                                <Setter Property="Foreground" Value="#979FA9" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <Button Grid.Column="1"
-                    MinWidth="118"
-                    Margin="16,0,0,0"
-                    Padding="14,8"
-                    VerticalAlignment="Top"
-                    Background="#FFF5F2EA"
-                    BorderBrush="#FFD9D2C4"
-                    BorderThickness="1"
-                    Foreground="#2C2C28"
-                    Click="OnOpenGitHubClick">
+        <Style x:Key="RowSwitch" TargetType="ToggleButton">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid Background="Transparent">
+                            <Border x:Name="Track"
+                                    Height="22"
+                                    Background="#707984"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    CornerRadius="11"
+                                    VerticalAlignment="Center">
+                                <Ellipse x:Name="Thumb"
+                                         Width="16" Height="16"
+                                         Margin="2"
+                                         HorizontalAlignment="Left"
+                                         Fill="White" />
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#172B42" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DetailsButton" TargetType="ToggleButton" BasedOn="{StaticResource RowButton}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+
+        <Style x:Key="SeparatorCheckBox" TargetType="CheckBox">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <Border x:Name="Box" Width="17" Height="17" Margin="0,0,7,0"
+                                    BorderBrush="#7C8794" BorderThickness="1" CornerRadius="3">
+                                <Path x:Name="Check" Data="M 0,3 L 3,6 L 9,0"
+                                      Stroke="White" StrokeThickness="1.7" Visibility="Collapsed"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Box" Property="Background" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#172B42" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Section" TargetType="Border">
+            <Setter Property="Padding" Value="0,16" />
+            <Setter Property="BorderBrush" Value="{StaticResource DividerBrush}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+        </Style>
+
+        <DataTemplate x:Key="TitleBarPreview">
+            <StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock FontSize="14"
-                               FontWeight="SemiBold"
-                               Text="GitHub" />
-                    <TextBlock Margin="8,0,0,0"
-                               FontSize="13"
-                               Foreground="#8A5A1F"
-                               Text="↗" />
+                    <TextBlock Text="标题栏预览" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <Border Margin="10,0,0,0" Padding="6,2" CornerRadius="4" Background="#E8EDF3"
+                            Visibility="{Binding IsPreviewSample, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="示例" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" />
+                    </Border>
                 </StackPanel>
-            </Button>
-        </Grid>
+                <Border Margin="0,8,0,0"
+                        Height="40"
+                        Background="#E9EEF5"
+                        BorderBrush="#B0BAC7"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Margin="12,0,14,0" VerticalAlignment="Center" Text="Codex" />
+                        <Grid Grid.Column="1" ClipToBounds="True" Margin="0,0,12,0">
+                            <views:HudPreviewTextBlock AutomationProperties.Name="HUD 预览"
+                                                       Candidates="{Binding PreviewCandidates}"
+                                                       FontFamily="{x:Static SystemFonts.MenuFontFamily}"
+                                                       FontSize="{Binding DisplayFontSize}"
+                                                       FontWeight="Normal"
+                                                       OffsetX="{Binding PositionOffsetX}"
+                                                       OffsetY="{Binding PositionOffsetY}"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis">
+                                <views:HudPreviewTextBlock.Style>
+                                    <Style TargetType="views:HudPreviewTextBlock">
+                                        <Setter Property="TextAlignment" Value="Center" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsHorizontalAlignmentLeft}" Value="True">
+                                                <Setter Property="TextAlignment" Value="Left" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsHorizontalAlignmentRight}" Value="True">
+                                                <Setter Property="TextAlignment" Value="Right" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </views:HudPreviewTextBlock.Style>
+                            </views:HudPreviewTextBlock>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </DataTemplate>
 
-        <Border Grid.Row="1"
-                Margin="0,18,0,0"
-                Padding="0"
-                CornerRadius="14"
-                Background="White"
-                BorderBrush="#FFE1E0DA"
-                BorderThickness="1">
-            <TabControl Background="Transparent"
-                        BorderThickness="0"
-                        Padding="12">
-                <TabItem Header="显示">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  Padding="12">
-                        <StackPanel>
-                            <Border Padding="16"
-                                    CornerRadius="12"
-                                    Background="#FFF9F8F3"
-                                    BorderBrush="#FFE8E3D7"
-                                    BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock FontSize="18"
-                                               FontWeight="SemiBold"
-                                               Foreground="#1E1E1C"
-                                               Text="显示内容" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Foreground="#6A6A65"
-                                               Text="{Binding DisplayItemsHintText}"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Margin="0,6,0,0"
-                                               Foreground="#7A756C"
-                                               Text="当 Codex 未返回某个窗口或对应重置时间时，HUD 会自动隐藏该项，避免显示过期字段。"
-                                               TextWrapping="Wrap" />
 
-                                    <CheckBox Margin="0,14,0,0"
-                                              Content="{Binding ShortWindowMenuText}"
-                                              IsEnabled="{Binding CanToggleShortWindow}"
-                                              IsChecked="{Binding ShowShortWindow, Mode=OneWay}"
-                                              Command="{Binding ToggleShortWindowCommand}" />
-                                    <StackPanel Margin="24,8,0,0"
-                                                IsEnabled="{Binding ShowShortWindow}">
-                                        <CheckBox Content="显示窗口标签"
-                                                  IsChecked="{Binding ShowShortWindowLabel, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowShortWindowLabelCommand}" />
-                                        <CheckBox Margin="0,6,0,0"
-                                                  Content="显示剩余百分比"
-                                                  IsChecked="{Binding ShowShortRemainingPercent, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowShortRemainingPercentCommand}" />
-                                        <CheckBox Margin="0,6,0,0"
-                                                  Content="显示重置时间（有值时）"
-                                                  IsChecked="{Binding ShowShortResetTime, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowShortResetTimeCommand}" />
-                                    </StackPanel>
+        <DataTemplate x:Key="ShortWindowDetails">
+            <StackPanel IsEnabled="{Binding ShowShortWindow}">
+                <CheckBox Content="显示窗口标签"
+                          IsChecked="{Binding ShowShortWindowLabel, Mode=OneWay}"
+                          Command="{Binding ToggleShowShortWindowLabelCommand}" />
+                <CheckBox Margin="0,6,0,0"
+                          Content="显示剩余百分比"
+                          IsChecked="{Binding ShowShortRemainingPercent, Mode=OneWay}"
+                          Command="{Binding ToggleShowShortRemainingPercentCommand}" />
+                <CheckBox Margin="0,6,0,0"
+                          Content="显示重置时间（有值时）"
+                          IsChecked="{Binding ShowShortResetTime, Mode=OneWay}"
+                          Command="{Binding ToggleShowShortResetTimeCommand}" />
+            </StackPanel>
+        </DataTemplate>
 
-                                    <CheckBox Margin="0,14,0,0"
-                                              Content="{Binding LongWindowMenuText}"
-                                              IsEnabled="{Binding CanToggleLongWindow}"
-                                              IsChecked="{Binding ShowLongWindow, Mode=OneWay}"
-                                              Command="{Binding ToggleLongWindowCommand}" />
-                                    <StackPanel Margin="24,8,0,0"
-                                                IsEnabled="{Binding ShowLongWindow}">
-                                        <CheckBox Content="显示窗口标签"
-                                                  IsChecked="{Binding ShowLongWindowLabel, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowLongWindowLabelCommand}" />
-                                        <CheckBox Margin="0,6,0,0"
-                                                  Content="显示剩余百分比"
-                                                  IsChecked="{Binding ShowLongRemainingPercent, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowLongRemainingPercentCommand}" />
-                                        <CheckBox Margin="0,6,0,0"
-                                                  Content="显示重置时间（有值时）"
-                                                  IsChecked="{Binding ShowLongResetTime, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowLongResetTimeCommand}" />
-                                    </StackPanel>
+        <DataTemplate x:Key="LongWindowDetails">
+            <StackPanel IsEnabled="{Binding ShowLongWindow}">
+                <CheckBox Content="显示窗口标签"
+                          IsChecked="{Binding ShowLongWindowLabel, Mode=OneWay}"
+                          Command="{Binding ToggleShowLongWindowLabelCommand}" />
+                <CheckBox Margin="0,6,0,0"
+                          Content="显示剩余百分比"
+                          IsChecked="{Binding ShowLongRemainingPercent, Mode=OneWay}"
+                          Command="{Binding ToggleShowLongRemainingPercentCommand}" />
+                <CheckBox Margin="0,6,0,0"
+                          Content="显示重置时间（有值时）"
+                          IsChecked="{Binding ShowLongResetTime, Mode=OneWay}"
+                          Command="{Binding ToggleShowLongResetTimeCommand}" />
+            </StackPanel>
+        </DataTemplate>
 
-                                    <CheckBox Margin="0,14,0,0"
-                                              Content="显示 Token 用量"
-                                              IsEnabled="{Binding CanToggleTokenUsage}"
-                                              IsChecked="{Binding ShowTokenUsage, Mode=OneWay}"
-                                              Command="{Binding ToggleTokenUsageCommand}" />
-                                    <StackPanel Margin="24,8,0,0"
-                                                IsEnabled="{Binding ShowTokenUsage}">
-                                        <CheckBox Content="显示本次"
-                                                  IsEnabled="{Binding CanToggleCurrentTokenUsage}"
-                                                  IsChecked="{Binding ShowCurrentTokenUsage, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowCurrentTokenUsageCommand}" />
-                                        <CheckBox Margin="0,6,0,0"
-                                                  Content="显示今日"
-                                                  IsEnabled="{Binding CanToggleTodayTokenUsage}"
-                                                  IsChecked="{Binding ShowTodayTokenUsage, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowTodayTokenUsageCommand}" />
-                                        <CheckBox Margin="0,6,0,0"
-                                                  Content="显示本周期"
-                                                  IsEnabled="{Binding CanToggleCurrentPeriodTokenUsage}"
-                                                  IsChecked="{Binding ShowCurrentPeriodTokenUsage, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowCurrentPeriodTokenUsageCommand}" />
+        <DataTemplate x:Key="TokenUsageDetails">
+            <StackPanel IsEnabled="{Binding ShowTokenUsage}">
+                <CheckBox Content="显示本次"
+                          IsEnabled="{Binding CanToggleCurrentTokenUsage}"
+                          IsChecked="{Binding ShowCurrentTokenUsage, Mode=OneWay}"
+                          Command="{Binding ToggleShowCurrentTokenUsageCommand}" />
+                <CheckBox Margin="0,6,0,0"
+                          Content="显示今日"
+                          IsEnabled="{Binding CanToggleTodayTokenUsage}"
+                          IsChecked="{Binding ShowTodayTokenUsage, Mode=OneWay}"
+                          Command="{Binding ToggleShowTodayTokenUsageCommand}" />
+                <CheckBox Margin="0,6,0,0"
+                          Content="显示本周期"
+                          IsEnabled="{Binding CanToggleCurrentPeriodTokenUsage}"
+                          IsChecked="{Binding ShowCurrentPeriodTokenUsage, Mode=OneWay}"
+                          Command="{Binding ToggleShowCurrentPeriodTokenUsageCommand}" />
+                <TextBlock Margin="0,6,0,0" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"
+                           Visibility="{Binding IsOnlyOneTokenUsageRangeEnabled, Converter={StaticResource BooleanToVisibility}}"
+                           Text="至少保留一个 Token 统计范围。" />
 
-                                        <TextBlock Margin="0,12,0,0"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="#2B2B28"
-                                                   Text="显示格式" />
-                                        <WrapPanel Margin="0,6,0,0">
-                                            <RadioButton Margin="0,0,18,8"
-                                                         Content="总量"
-                                                         IsChecked="{Binding IsTokenUsageTotalFormat, Mode=OneWay}"
-                                                         Command="{Binding SetTokenUsageTotalFormatCommand}" />
-                                            <RadioButton Margin="0,0,18,8"
-                                                         Content="输入 / 输出拆分"
-                                                         IsChecked="{Binding IsTokenUsageInputOutputFormat, Mode=OneWay}"
-                                                         Command="{Binding SetTokenUsageInputOutputFormatCommand}" />
-                                        </WrapPanel>
+                <TextBlock Margin="0,12,0,0"
+                           FontWeight="SemiBold"
+                           Foreground="#2B2B28"
+                           Text="显示格式" />
+                <WrapPanel Margin="0,6,0,0">
+                    <RadioButton Margin="0,0,18,8"
+                                 Content="总量"
+                                 IsChecked="{Binding IsTokenUsageTotalFormat, Mode=OneWay}"
+                                 Command="{Binding SetTokenUsageTotalFormatCommand}" />
+                    <RadioButton Margin="0,0,18,8"
+                                 Content="输入 / 输出拆分"
+                                 IsChecked="{Binding IsTokenUsageInputOutputFormat, Mode=OneWay}"
+                                 Command="{Binding SetTokenUsageInputOutputFormatCommand}" />
+                </WrapPanel>
 
-                                        <TextBlock Margin="0,8,0,0"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="#2B2B28"
-                                                   Text="单位格式" />
-                                        <WrapPanel Margin="0,6,0,0">
-                                            <RadioButton Margin="0,0,18,8"
-                                                         Content="自动简写"
-                                                         IsChecked="{Binding IsTokenUsageAutoUnitFormat, Mode=OneWay}"
-                                                         Command="{Binding SetTokenUsageAutoUnitFormatCommand}" />
-                                            <RadioButton Margin="0,0,18,8"
-                                                         Content="完整数字"
-                                                         IsChecked="{Binding IsTokenUsageFullUnitFormat, Mode=OneWay}"
-                                                         Command="{Binding SetTokenUsageFullUnitFormatCommand}" />
-                                        </WrapPanel>
+                <TextBlock Margin="0,8,0,0"
+                           FontWeight="SemiBold"
+                           Foreground="#2B2B28"
+                           Text="单位格式" />
+                <WrapPanel Margin="0,6,0,0">
+                    <RadioButton Margin="0,0,18,8"
+                                 Content="自动简写"
+                                 IsChecked="{Binding IsTokenUsageAutoUnitFormat, Mode=OneWay}"
+                                 Command="{Binding SetTokenUsageAutoUnitFormatCommand}" />
+                    <RadioButton Margin="0,0,18,8"
+                                 Content="完整数字"
+                                 IsChecked="{Binding IsTokenUsageFullUnitFormat, Mode=OneWay}"
+                                 Command="{Binding SetTokenUsageFullUnitFormatCommand}" />
+                </WrapPanel>
+            </StackPanel>
+        </DataTemplate>
 
-                                        <TextBlock Margin="0,8,0,0"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="#2B2B28"
-                                                   Text="Token 用量刷新频率" />
-                                        <WrapPanel Margin="0,6,0,0">
-                                            <RadioButton Margin="0,0,18,8"
-                                                         Content="10 秒"
-                                                         IsChecked="{Binding IsTokenUsageRefreshEvery10Seconds, Mode=OneWay}"
-                                                         Command="{Binding SetTokenUsageRefreshEvery10SecondsCommand}" />
-                                            <RadioButton Margin="0,0,18,8"
-                                                         Content="20 秒"
-                                                         IsChecked="{Binding IsTokenUsageRefreshEvery20Seconds, Mode=OneWay}"
-                                                         Command="{Binding SetTokenUsageRefreshEvery20SecondsCommand}" />
-                                            <RadioButton Margin="0,0,18,8"
-                                                         Content="1 分钟"
-                                                         IsChecked="{Binding IsTokenUsageRefreshEvery60Seconds, Mode=OneWay}"
-                                                         Command="{Binding SetTokenUsageRefreshEvery60SecondsCommand}" />
-                                        </WrapPanel>
-                                    </StackPanel>
+        <DataTemplate x:Key="ResetCreditsDetails">
+            <StackPanel IsEnabled="{Binding ShowResetCredits}">
+                <CheckBox Content="显示重置次数标签"
+                          IsChecked="{Binding ShowResetCreditsLabel, Mode=OneWay}"
+                          Command="{Binding ToggleShowResetCreditsLabelCommand}" />
+                <TextBlock Margin="0,12,0,6" FontWeight="SemiBold" Text="到期信息" />
+                <WrapPanel>
+                    <RadioButton Margin="0,0,16,0" Content="不显示"
+                                 IsChecked="{Binding HideResetCreditExpirations, Mode=OneWay}"
+                                 Command="{Binding HideResetCreditExpirationsCommand}" />
+                    <RadioButton Margin="0,0,16,0" Content="最近到期"
+                                 IsChecked="{Binding ShowResetCreditsNearestExpiration, Mode=OneWay}"
+                                 Command="{Binding ShowNearestResetCreditExpirationCommand}" />
+                    <RadioButton Content="全部到期"
+                                 IsChecked="{Binding ShowResetCreditsAllExpirations, Mode=OneWay}"
+                                 Command="{Binding ShowAllResetCreditExpirationsCommand}" />
+                </WrapPanel>
+            </StackPanel>
+        </DataTemplate>
 
-                                    <CheckBox Margin="0,14,0,0"
-                                              Content="显示重置次数"
-                                              IsEnabled="{Binding CanToggleResetCredits}"
-                                              IsChecked="{Binding ShowResetCredits, Mode=OneWay}"
-                                              Command="{Binding ToggleResetCreditsCommand}" />
-                                    <StackPanel Margin="24,8,0,0"
-                                                IsEnabled="{Binding ShowResetCredits}">
-                                        <CheckBox Content="显示“重置次数”标签"
-                                                  IsChecked="{Binding ShowResetCreditsLabel, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowResetCreditsLabelCommand}" />
-                                        <CheckBox Margin="0,6,0,0"
-                                                  Content="显示最近到期日期"
-                                                  IsChecked="{Binding ShowResetCreditsNearestExpiration, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowResetCreditsNearestExpirationCommand}" />
-                                        <CheckBox Margin="0,6,0,0"
-                                                  Content="显示全部到期日期"
-                                                  IsChecked="{Binding ShowResetCreditsAllExpirations, Mode=OneWay}"
-                                                  Command="{Binding ToggleShowResetCreditsAllExpirationsCommand}" />
-                                    </StackPanel>
+        <DataTemplate x:Key="DisplayRow">
+            <Border BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0">
+                <StackPanel>
+                    <Grid MinHeight="84">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Margin="4,0,0,0" Text="{Binding Position}"
+                                   VerticalAlignment="Center" FontWeight="SemiBold" />
+                        <StackPanel Grid.Column="1" Margin="8,8,12,8" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Label}" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Margin="0,3,0,0" Text="{Binding Summary}" FontSize="13" TextWrapping="Wrap"
+                                       Foreground="{StaticResource SecondaryTextBrush}" />
+                        </StackPanel>
+                        <ToggleButton Grid.Column="2" Style="{StaticResource RowSwitch}"
+                                      AutomationProperties.Name="{Binding Label, StringFormat=显示{0}}"
+                                      IsChecked="{Binding IsShown, Mode=OneWay}"
+                                      IsEnabled="{Binding CanToggle}" Command="{Binding ToggleCommand}" />
+                        <ToggleButton Grid.Column="3" Margin="12,0,12,0" Style="{StaticResource DetailsButton}"
+                                      AutomationProperties.Name="{Binding Label, StringFormat={}{0}细项}"
+                                      IsChecked="{Binding IsExpanded, Mode=TwoWay}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="细项" />
+                                <Path Margin="7,0,0,0" VerticalAlignment="Center" Stroke="#293441"
+                                      StrokeThickness="1.5" Data="M 0,0 L 4,4 L 8,0"
+                                      RenderTransformOrigin="0.5,0.5">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                    <Setter Property="RenderTransform">
+                                                        <Setter.Value><RotateTransform Angle="180" /></Setter.Value>
+                                                    </Setter>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                            </StackPanel>
+                        </ToggleButton>
+                        <Button Grid.Column="4" Width="36" Margin="0,0,6,0" Style="{StaticResource RowButton}"
+                                AutomationProperties.Name="{Binding Label, StringFormat=上移{0}}" ToolTip="上移"
+                                IsEnabled="{Binding CanMoveUp}" Command="{Binding MoveUpCommand}">
+                            <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.5" Data="M 0,5 L 5,0 L 10,5 M 5,0 L 5,12" />
+                        </Button>
+                        <Button Grid.Column="5" Width="36" Style="{StaticResource RowButton}"
+                                AutomationProperties.Name="{Binding Label, StringFormat=下移{0}}" ToolTip="下移"
+                                IsEnabled="{Binding CanMoveDown}" Command="{Binding MoveDownCommand}">
+                            <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.5" Data="M 0,7 L 5,12 L 10,7 M 5,12 L 5,0" />
+                        </Button>
+                    </Grid>
+                    <ContentControl Margin="36,0,0,16"
+                                    Visibility="{Binding IsExpanded, Converter={StaticResource BooleanToVisibility}}"
+                                    Content="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <ContentControl.Style>
+                            <Style TargetType="ContentControl">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Item}" Value="{x:Static models:HudDisplayItem.ShortWindow}">
+                                        <Setter Property="ContentTemplate" Value="{StaticResource ShortWindowDetails}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Item}" Value="{x:Static models:HudDisplayItem.LongWindow}">
+                                        <Setter Property="ContentTemplate" Value="{StaticResource LongWindowDetails}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Item}" Value="{x:Static models:HudDisplayItem.TokenUsage}">
+                                        <Setter Property="ContentTemplate" Value="{StaticResource TokenUsageDetails}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Item}" Value="{x:Static models:HudDisplayItem.ResetCredits}">
+                                        <Setter Property="ContentTemplate" Value="{StaticResource ResetCreditsDetails}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ContentControl.Style>
+                    </ContentControl>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
 
-                                    <CheckBox Margin="0,14,0,0"
-                                              Content="使用圆点分隔各显示段"
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Bottom" Margin="24,0,24,12"
+                   Foreground="#A32722" Text="{Binding SettingsSaveError}" TextWrapping="Wrap">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding SettingsSaveError}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+        <TabControl Background="Transparent" ItemContainerStyle="{StaticResource SettingsTab}">
+            <TabControl.Template>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border Padding="12,0" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1">
+                            <TabPanel IsItemsHost="True" KeyboardNavigation.TabIndex="0" />
+                        </Border>
+                        <ContentPresenter Grid.Row="1" x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" />
+                    </Grid>
+                </ControlTemplate>
+            </TabControl.Template>
+
+            <TabItem Header="显示内容">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="24,28,24,0">
+                        <TextBlock Text="显示内容" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,20" />
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TitleBarPreview}" />
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="24,28,24,20">
+                            <ItemsControl ItemsSource="{Binding DisplayOrderRows}" ItemTemplate="{StaticResource DisplayRow}" />
+                            <TextBlock Margin="36,4,0,10" Foreground="{StaticResource SecondaryTextBrush}"
+                                       Visibility="{Binding IsOnlyOneDisplayItemEnabled, Converter={StaticResource BooleanToVisibility}}"
+                                       Text="至少保留一个显示项，当前最后一项不可关闭。" TextWrapping="Wrap" />
+                            <Border BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="0,18,0,0">
+                                <DockPanel LastChildFill="False">
+                                    <CheckBox Content="使用圆点分隔各显示段" Style="{StaticResource SeparatorCheckBox}"
                                               IsChecked="{Binding ShowSeparatorDots, Mode=OneWay}"
                                               Command="{Binding ToggleShowSeparatorDotsCommand}" />
-                                </StackPanel>
-                            </Border>
-
-                            <Border Margin="0,16,0,0"
-                                    Padding="16"
-                                    CornerRadius="12"
-                                    Background="#FFF9F8F3"
-                                    BorderBrush="#FFE8E3D7"
-                                    BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock FontSize="18"
-                                               FontWeight="SemiBold"
-                                               Foreground="#1E1E1C"
-                                               Text="显示顺序" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Foreground="#6A6A65"
-                                               Text="控制短周期、长周期、Token 用量和重置次数在 HUD 中的先后顺序。"
-                                               TextWrapping="Wrap" />
-
-                                    <ItemsControl Margin="0,14,0,0"
-                                                  ItemsSource="{Binding DisplayOrderRows}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Grid Margin="0,0,0,10">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="72" />
-                                                        <ColumnDefinition Width="72" />
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <TextBlock Grid.Column="0"
-                                                               VerticalAlignment="Center"
-                                                               Text="{Binding Summary}" />
-                                                    <Button Grid.Column="1"
-                                                            Margin="10,0,0,0"
-                                                            Padding="10,6"
-                                                            IsEnabled="{Binding CanMoveUp}"
-                                                            Command="{Binding MoveUpCommand}"
-                                                            Content="上移" />
-                                                    <Button Grid.Column="2"
-                                                            Margin="10,0,0,0"
-                                                            Padding="10,6"
-                                                            IsEnabled="{Binding CanMoveDown}"
-                                                            Command="{Binding MoveDownCommand}"
-                                                            Content="下移" />
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
+                                    <TextBlock DockPanel.Dock="Right" Text="更改自动保存"
+                                               Foreground="{StaticResource SecondaryTextBrush}" />
+                                </DockPanel>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
-                </TabItem>
+                </DockPanel>
+            </TabItem>
 
-                <TabItem Header="外观">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  Padding="12">
-                        <StackPanel>
-                            <Border Padding="16"
-                                    CornerRadius="12"
-                                    Background="#FFF9F8F3"
-                                    BorderBrush="#FFE8E3D7"
-                                    BorderThickness="1">
+
+            <TabItem Header="外观与位置">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="24,28,24,0">
+                        <TextBlock Text="外观与位置" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,20" />
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TitleBarPreview}" />
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="24,20,24,20">
+                            <Border Style="{StaticResource Section}">
                                 <StackPanel>
                                     <TextBlock FontSize="18"
                                                FontWeight="SemiBold"
@@ -374,95 +547,7 @@
                                     </Grid>
                                 </StackPanel>
                             </Border>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
-
-                <TabItem Header="位置与颜色">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  Padding="12">
-                        <StackPanel>
-                            <Border Padding="16"
-                                    CornerRadius="12"
-                                    Background="#FFF9F8F3"
-                                    BorderBrush="#FFE8E3D7"
-                                    BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock FontSize="18"
-                                               FontWeight="SemiBold"
-                                               Foreground="#1E1E1C"
-                                               Text="位置" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Foreground="#6A6A65"
-                                               Text="仍然跟随 Codex/ChatGPT 标题栏，只在最终位置上叠加偏移。"
-                                               TextWrapping="Wrap" />
-
-                                    <TextBlock Margin="0,14,0,0"
-                                               FontWeight="SemiBold"
-                                               Foreground="#2B2B28"
-                                               Text="水平停靠" />
-                                    <WrapPanel Margin="0,8,0,0">
-                                        <RadioButton Margin="0,0,22,0"
-                                                     Content="居左"
-                                                     IsChecked="{Binding IsHorizontalAlignmentLeft, Mode=OneWay}"
-                                                     Command="{Binding SetHorizontalAlignmentLeftCommand}" />
-                                        <RadioButton Margin="0,0,22,0"
-                                                     Content="居中"
-                                                     IsChecked="{Binding IsHorizontalAlignmentCenter, Mode=OneWay}"
-                                                     Command="{Binding SetHorizontalAlignmentCenterCommand}" />
-                                        <RadioButton Content="居右"
-                                                     IsChecked="{Binding IsHorizontalAlignmentRight, Mode=OneWay}"
-                                                     Command="{Binding SetHorizontalAlignmentRightCommand}" />
-                                    </WrapPanel>
-
-                                    <TextBlock Margin="0,14,0,0"
-                                               FontWeight="SemiBold"
-                                               Foreground="#2B2B28"
-                                               Text="{Binding PositionOffsetSummary}" />
-
-                                    <WrapPanel Margin="0,12,0,0">
-                                        <Button Width="82"
-                                                Padding="10,6"
-                                                Tag="Left"
-                                                Click="OnNudgePositionButtonClick"
-                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
-                                                Content="左移" />
-                                        <Button Width="82"
-                                                Margin="8,0,0,0"
-                                                Padding="10,6"
-                                                Tag="Up"
-                                                Click="OnNudgePositionButtonClick"
-                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
-                                                Content="上移" />
-                                        <Button Width="82"
-                                                Margin="8,0,0,0"
-                                                Padding="10,6"
-                                                Tag="Down"
-                                                Click="OnNudgePositionButtonClick"
-                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
-                                                Content="下移" />
-                                        <Button Width="82"
-                                                Margin="8,0,0,0"
-                                                Padding="10,6"
-                                                Tag="Right"
-                                                Click="OnNudgePositionButtonClick"
-                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
-                                                Content="右移" />
-                                        <Button Width="132"
-                                                Margin="8,0,0,0"
-                                                Padding="10,6"
-                                                Command="{Binding ResetPositionCommand}"
-                                                Content="恢复默认位置" />
-                                    </WrapPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Margin="0,16,0,0"
-                                    Padding="16"
-                                    CornerRadius="12"
-                                    Background="#FFF9F8F3"
-                                    BorderBrush="#FFE8E3D7"
-                                    BorderThickness="1">
+                            <Border Style="{StaticResource Section}">
                                 <StackPanel>
                                     <TextBlock FontSize="18"
                                                FontWeight="SemiBold"
@@ -627,118 +712,215 @@
                                             Content="恢复默认色" />
                                 </StackPanel>
                             </Border>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
-
-                <TabItem Header="刷新与启动">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  Padding="12">
-                        <StackPanel>
-                            <Border Padding="16"
-                                    CornerRadius="12"
-                                    Background="#FFF9F8F3"
-                                    BorderBrush="#FFE8E3D7"
-                                    BorderThickness="1">
+                            <Border Style="{StaticResource Section}">
                                 <StackPanel>
                                     <TextBlock FontSize="18"
                                                FontWeight="SemiBold"
                                                Foreground="#1E1E1C"
-                                               Text="刷新策略" />
+                                               Text="位置" />
                                     <TextBlock Margin="0,4,0,0"
                                                Foreground="#6A6A65"
-                                               Text="{Binding AutoRefreshHintText}"
+                                               Text="仍然跟随 Codex/ChatGPT 标题栏，只在最终位置上叠加偏移。"
                                                TextWrapping="Wrap" />
-
-                                    <CheckBox Margin="0,14,0,0"
-                                              Content="自动刷新"
-                                              IsChecked="{Binding AutoRefreshEnabled, Mode=OneWay}"
-                                              Command="{Binding ToggleAutoRefreshCommand}" />
 
                                     <TextBlock Margin="0,14,0,0"
                                                FontWeight="SemiBold"
                                                Foreground="#2B2B28"
-                                               Text="刷新频率" />
-                                    <StackPanel Margin="0,8,0,0"
-                                                IsEnabled="{Binding AutoRefreshEnabled}">
-                                        <RadioButton Content="20 秒"
-                                                     IsChecked="{Binding IsRefreshEvery20Seconds, Mode=OneWay}"
-                                                     Command="{Binding SetRefreshEvery20SecondsCommand}" />
-                                        <RadioButton Margin="0,6,0,0"
-                                                     Content="1 分钟"
-                                                     IsChecked="{Binding IsRefreshEvery60Seconds, Mode=OneWay}"
-                                                     Command="{Binding SetRefreshEvery60SecondsCommand}" />
-                                        <RadioButton Margin="0,6,0,0"
-                                                     Content="5 分钟"
-                                                     IsChecked="{Binding IsRefreshEvery300Seconds, Mode=OneWay}"
-                                                     Command="{Binding SetRefreshEvery300SecondsCommand}" />
-                                    </StackPanel>
+                                               Text="水平停靠" />
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <RadioButton Margin="0,0,22,0"
+                                                     Content="居左"
+                                                     IsChecked="{Binding IsHorizontalAlignmentLeft, Mode=OneWay}"
+                                                     Command="{Binding SetHorizontalAlignmentLeftCommand}" />
+                                        <RadioButton Margin="0,0,22,0"
+                                                     Content="居中"
+                                                     IsChecked="{Binding IsHorizontalAlignmentCenter, Mode=OneWay}"
+                                                     Command="{Binding SetHorizontalAlignmentCenterCommand}" />
+                                        <RadioButton Content="居右"
+                                                     IsChecked="{Binding IsHorizontalAlignmentRight, Mode=OneWay}"
+                                                     Command="{Binding SetHorizontalAlignmentRightCommand}" />
+                                    </WrapPanel>
 
-                                    <Button Margin="0,16,0,0"
-                                            Width="96"
-                                            HorizontalAlignment="Left"
-                                            Padding="12,6"
-                                            Command="{Binding RefreshNowCommand}"
-                                            Content="立即刷新" />
-                                </StackPanel>
-                            </Border>
-
-                            <Border Margin="0,16,0,0"
-                                    Padding="16"
-                                    CornerRadius="12"
-                                    Background="#FFF9F8F3"
-                                    BorderBrush="#FFE8E3D7"
-                                    BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock FontSize="18"
+                                    <TextBlock Margin="0,14,0,0"
                                                FontWeight="SemiBold"
-                                               Foreground="#1E1E1C"
-                                               Text="启动行为" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Foreground="#6A6A65"
-                                               Text="仅在本次 HUD 启动阶段尝试一次，不会持续守护重启 Codex/ChatGPT。"
-                                               TextWrapping="Wrap" />
+                                               Foreground="#2B2B28"
+                                               Text="{Binding PositionOffsetSummary}" />
 
-                                    <CheckBox Margin="0,14,0,0"
-                                              Content="启动 HUD 时自动启动 Codex/ChatGPT"
-                                              IsChecked="{Binding AutoLaunchCodexOnStartup, Mode=OneWay}"
-                                              Command="{Binding ToggleAutoLaunchCodexOnStartupCommand}" />
-                                </StackPanel>
-                            </Border>
-
-                            <Border Margin="0,16,0,0"
-                                    Padding="16"
-                                    CornerRadius="12"
-                                    Background="#FFF9F8F3"
-                                    BorderBrush="#FFE8E3D7"
-                                    BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock FontSize="18"
-                                               FontWeight="SemiBold"
-                                               Foreground="#1E1E1C"
-                                               Text="导入与导出" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Foreground="#6A6A65"
-                                               Text="把当前 HUD 设置保存成 JSON，或者从已有 JSON 恢复。"
-                                               TextWrapping="Wrap" />
-
-                                    <WrapPanel Margin="0,14,0,0">
+                                    <WrapPanel Margin="0,10,0,0">
+                                        <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" Text="微调步长" />
+                                        <RadioButton Margin="0,0,14,0" Content="1 px" IsChecked="True" />
+                                        <RadioButton x:Name="CoarseNudgeStep" Content="5 px" />
+                                    </WrapPanel>
+                                        <WrapPanel Margin="0,12,0,0">
+                                        <Button Width="64"
+                                                Padding="10,6"
+                                                Tag="Left"
+                                                Click="OnNudgePositionButtonClick"
+                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
+                                                Content="左移" />
+                                        <Button Width="64"
+                                                Margin="8,0,0,0"
+                                                Padding="10,6"
+                                                Tag="Up"
+                                                Click="OnNudgePositionButtonClick"
+                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
+                                                Content="上移" />
+                                        <Button Width="64"
+                                                Margin="8,0,0,0"
+                                                Padding="10,6"
+                                                Tag="Down"
+                                                Click="OnNudgePositionButtonClick"
+                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
+                                                Content="下移" />
+                                        <Button Width="64"
+                                                Margin="8,0,0,0"
+                                                Padding="10,6"
+                                                Tag="Right"
+                                                Click="OnNudgePositionButtonClick"
+                                                PreviewMouseRightButtonUp="OnNudgePositionButtonRightClick"
+                                                Content="右移" />
                                         <Button Width="120"
-                                                Padding="12,6"
-                                                Command="{Binding ExportSettingsCommand}"
-                                                Content="导出设置" />
-                                        <Button Width="120"
-                                                Margin="12,0,0,0"
-                                                Padding="12,6"
-                                                Command="{Binding ImportSettingsCommand}"
-                                                Content="导入设置" />
+                                                Margin="8,0,0,0"
+                                                Padding="10,6"
+                                                Command="{Binding ResetPositionCommand}"
+                                                Content="重置当前偏移" />
                                     </WrapPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
-                </TabItem>
-            </TabControl>
-        </Border>
-    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="刷新">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="24,24,24,20">
+                        <TextBlock Text="刷新" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,20" />
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="#1E1E1C"
+                                           Text="刷新策略" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Foreground="#6A6A65"
+                                           Text="{Binding AutoRefreshHintText}"
+                                           TextWrapping="Wrap" />
+
+                                <CheckBox Margin="0,14,0,0"
+                                          Content="自动刷新"
+                                          IsChecked="{Binding AutoRefreshEnabled, Mode=OneWay}"
+                                          Command="{Binding ToggleAutoRefreshCommand}" />
+
+                                <TextBlock Margin="0,14,0,0"
+                                           FontWeight="SemiBold"
+                                           Foreground="#2B2B28"
+                                           Text="基础间隔" />
+                                <WrapPanel Margin="0,8,0,0"
+                                            IsEnabled="{Binding AutoRefreshEnabled}">
+                                    <RadioButton Content="20 秒"
+                                                 IsChecked="{Binding IsRefreshEvery20Seconds, Mode=OneWay}"
+                                                 Command="{Binding SetRefreshEvery20SecondsCommand}" />
+                                    <RadioButton Margin="16,0,0,0"
+                                                 Content="1 分钟"
+                                                 IsChecked="{Binding IsRefreshEvery60Seconds, Mode=OneWay}"
+                                                 Command="{Binding SetRefreshEvery60SecondsCommand}" />
+                                    <RadioButton Margin="16,0,0,0"
+                                                 Content="5 分钟"
+                                                 IsChecked="{Binding IsRefreshEvery300Seconds, Mode=OneWay}"
+                                                 Command="{Binding SetRefreshEvery300SecondsCommand}" />
+                                </WrapPanel>
+
+                                <TextBlock Margin="0,16,0,0" FontWeight="SemiBold" Text="Token 启用时的刷新间隔" />
+                                <WrapPanel Margin="0,8,0,0" IsEnabled="{Binding ShowTokenUsage}">
+                                    <RadioButton Margin="0,0,16,0"
+                                                 Content="10 秒"
+                                                 IsChecked="{Binding IsTokenUsageRefreshEvery10Seconds, Mode=OneWay}"
+                                                 Command="{Binding SetTokenUsageRefreshEvery10SecondsCommand}" />
+                                    <RadioButton Margin="0,0,16,0"
+                                                 Content="20 秒"
+                                                 IsChecked="{Binding IsTokenUsageRefreshEvery20Seconds, Mode=OneWay}"
+                                                 Command="{Binding SetTokenUsageRefreshEvery20SecondsCommand}" />
+                                    <RadioButton Content="1 分钟"
+                                                 IsChecked="{Binding IsTokenUsageRefreshEvery60Seconds, Mode=OneWay}"
+                                                 Command="{Binding SetTokenUsageRefreshEvery60SecondsCommand}" />
+                                </WrapPanel>
+
+                                <Button Margin="0,16,0,0"
+                                        Width="96"
+                                        HorizontalAlignment="Left"
+                                        Padding="12,6"
+                                        Command="{Binding RefreshNowCommand}"
+                                        Content="立即刷新" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="启动与备份">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="24,24,24,20">
+                        <TextBlock Text="启动与备份" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,20" />
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="#1E1E1C"
+                                           Text="启动行为" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Foreground="#6A6A65"
+                                           Text="登录启动按当前 Windows 用户设置。HUD 启动时只尝试打开一次 Codex / ChatGPT。"
+                                           TextWrapping="Wrap" />
+
+                                <CheckBox Margin="0,14,0,0"
+                                          Content="登录 Windows 时启动 HUD"
+                                          IsChecked="{Binding LaunchHudAtSignIn, Mode=OneWay}"
+                                          Command="{Binding ToggleLaunchHudAtSignInCommand}" />
+                                <CheckBox Margin="0,10,0,0"
+                                          Content="HUD 启动时打开 Codex / ChatGPT"
+                                          IsChecked="{Binding AutoLaunchCodexOnStartup, Mode=OneWay}"
+                                          Command="{Binding ToggleAutoLaunchCodexOnStartupCommand}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Section}">
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="#1E1E1C"
+                                           Text="导入与导出" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Foreground="#6A6A65"
+                                           Text="用 JSON 备份或恢复 HUD 设置。Windows 登录启动由系统单独管理。"
+                                           TextWrapping="Wrap" />
+
+                                <WrapPanel Margin="0,14,0,0">
+                                    <Button Width="120"
+                                            Padding="12,6"
+                                            Command="{Binding ExportSettingsCommand}"
+                                            Content="导出设置" />
+                                    <Button Width="120"
+                                            Margin="12,0,0,0"
+                                            Padding="12,6"
+                                            Command="{Binding ImportSettingsCommand}"
+                                            Content="导入设置" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Section}">
+                            <DockPanel LastChildFill="False">
+                                <TextBlock VerticalAlignment="Center"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           Text="{Binding AppVersionText, ElementName=RootWindow}" />
+                                <Button DockPanel.Dock="Right" Padding="12,5" Click="OnOpenGitHubClick" Content="GitHub" />
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+
+    </DockPanel>
+
 </Window>

@@ -115,6 +115,10 @@ internal static class Program
             DeleteIfExists(Path.Combine(startMenuDir, $"{AppName}.lnk"));
             DeleteDirectoryIfExists(startMenuDir);
             DeleteUninstallEntry();
+            using (var startupKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", writable: true))
+            {
+                startupKey?.DeleteValue(AppName, throwOnMissingValue: false);
+            }
 
             ScheduleInstallDirectoryRemoval(installDir);
 

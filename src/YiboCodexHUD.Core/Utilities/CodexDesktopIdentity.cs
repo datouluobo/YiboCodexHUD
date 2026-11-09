@@ -317,7 +317,9 @@ public static class CodexDesktopIdentity
         foreach (var packageDirectory in EnumerateOpenAiPackageDirectories())
         {
             var packageFamilyName = Path.GetFileName(packageDirectory);
-            if (!string.IsNullOrWhiteSpace(packageFamilyName))
+            if (!string.IsNullOrWhiteSpace(packageFamilyName)
+                && (packageFamilyName.StartsWith("OpenAI.Codex_", StringComparison.OrdinalIgnoreCase)
+                    || packageFamilyName.StartsWith("OpenAI.ChatGPT_", StringComparison.OrdinalIgnoreCase)))
             {
                 yield return packageFamilyName;
             }

@@ -40,6 +40,7 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        viewModel.RefreshLaunchHudAtSignIn();
         _isApplyingStoredBounds = true;
         try
         {
@@ -101,7 +102,7 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        var (deltaX, deltaY) = GetNudgeDelta(button.Tag as string, stepPx: 1);
+        var (deltaX, deltaY) = GetNudgeDelta(button.Tag as string, stepPx: CoarseNudgeStep.IsChecked == true ? 5 : 1);
         if (deltaX == 0 && deltaY == 0)
         {
             return;

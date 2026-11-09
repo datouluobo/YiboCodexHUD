@@ -103,5 +103,5 @@ public sealed record HudSettings
 
     public double SettingsWindowWidth { get; init; } = 620d;
 
-    public double SettingsWindowHeight { get; init; } = 820d;
+    public double SettingsWindowHeight { get; init; } = 700d;
 }

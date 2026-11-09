@@ -54,7 +54,27 @@ public sealed class HudSettingsStore : IHudSettingsStore
 
         Directory.CreateDirectory(directoryPath);
 
-        await using var stream = File.Create(_settingsFilePath);
-        await JsonSerializer.SerializeAsync(stream, settings, SerializerOptions, cancellationToken);
+        var temporaryPath = Path.Combine(directoryPath, $".hudsettings-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await using (var stream = File.Create(temporaryPath))
+            {
+                await JsonSerializer.SerializeAsync(stream, settings, SerializerOptions, cancellationToken);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporaryPath, _settingsFilePath, overwrite: true);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporaryPath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(exception, "Failed to remove temporary HUD settings file {TemporaryPath}.", temporaryPath);
+            }
+        }
     }
 }

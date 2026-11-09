@@ -1,8 +1,10 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.IO;
 using System.Windows.Input;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -22,9 +24,11 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     private const string DefaultMediumRemainingColorHex = "#FFC28A22";
     private const string DefaultLowRemainingColorHex = "#FFC24A3A";
     private const double DefaultSettingsWindowWidth = 620d;
-    private const double DefaultSettingsWindowHeight = 820d;
+    private const double DefaultSettingsWindowHeight = 700d;
     private const int ExpiryDayRefreshIntervalSeconds = 120;
     private const int InitialFailureRetryIntervalSeconds = 5;
+    private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string StartupRegistryValueName = "YiboCodexHUD";
     private static readonly TimeZoneInfo BeijingTimeZone = ResolveBeijingTimeZone();
 
     private static readonly JsonSerializerOptions ImportExportSerializerOptions = new()
@@ -38,9 +42,11 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     private readonly ICodexWindowTracker _windowTracker;
     private readonly CodexDesktopLauncher _codexDesktopLauncher;
     private readonly ILogger<OverlayViewModel> _logger;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly SemaphoreSlim _settingsGate = new(1, 1);
     private readonly CancellationTokenSource _shutdownCts = new();
+    private readonly ObservableCollection<DisplayOrderRow> _displayOrderRows;
     private HudSettings _settings = new();
     private UsageSnapshot? _latestSnapshot;
     private IReadOnlyList<StyledDisplaySegment> _displaySegments = Array.Empty<StyledDisplaySegment>();
@@ -48,6 +54,12 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     private IReadOnlyList<StyledDisplaySegment> _minimalDisplaySegments = Array.Empty<StyledDisplaySegment>();
     private bool _hasSnapshot;
     private bool _refreshLoopStarted;
+
+    [ObservableProperty]
+    private IReadOnlyList<IReadOnlyList<StyledDisplaySegment>> _previewCandidates = [];
+
+    [ObservableProperty]
+    private string? _settingsSaveError;
 
     [ObservableProperty]
     private string _displayText = "正在读取用量...";
@@ -115,10 +127,10 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     public bool CanToggleTodayTokenUsage => !ShowTodayTokenUsage || GetEnabledTokenUsageRangeCount() > 1;
     public bool CanToggleCurrentPeriodTokenUsage => !ShowCurrentPeriodTokenUsage || GetEnabledTokenUsageRangeCount() > 1;
     public bool IsOnlyOneDisplayItemEnabled => GetEnabledDisplayItemCount() == 1;
-    public string DisplayItemsHintText => IsOnlyOneDisplayItemEnabled
-        ? "至少保留一个显示项，当前最后一项不可关闭。"
-        : "控制 HUD 文本里展示哪些统计项。";
+    public bool IsOnlyOneTokenUsageRangeEnabled => GetEnabledTokenUsageRangeCount() == 1;
+    public bool IsPreviewSample => _latestSnapshot is null;
     public bool AutoLaunchCodexOnStartup => _settings.AutoLaunchCodexOnStartup;
+    public bool LaunchHudAtSignIn { get; private set; }
     public bool AutoRefreshEnabled => _settings.AutoRefreshEnabled;
     public bool IsDisplayModeAuto => _settings.DisplayMode == HudDisplayMode.Auto;
     public bool IsDisplayModeFull => _settings.DisplayMode == HudDisplayMode.Full;
@@ -168,29 +180,12 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     public bool ShowResetCreditsLabel => _settings.ShowResetCreditsLabel;
     public bool ShowResetCreditsNearestExpiration => _settings.ShowResetCreditsNearestExpiration;
     public bool ShowResetCreditsAllExpirations => _settings.ShowResetCreditsAllExpirations;
+    public bool HideResetCreditExpirations => !ShowResetCreditsNearestExpiration && !ShowResetCreditsAllExpirations;
     public bool ShowSeparatorDots => _settings.ShowSeparatorDots;
-    public int ShortWindowOrder => _settings.ShortWindowOrder;
-    public int LongWindowOrder => _settings.LongWindowOrder;
-    public int TokenUsageOrder => _settings.TokenUsageOrder;
-    public int ResetCreditsOrder => _settings.ResetCreditsOrder;
-    public string ShortWindowOrderSummary => BuildDisplayOrderSummary(HudDisplayItem.ShortWindow, "短周期");
-    public string LongWindowOrderSummary => BuildDisplayOrderSummary(HudDisplayItem.LongWindow, "长周期");
-    public string TokenUsageOrderSummary => BuildDisplayOrderSummary(HudDisplayItem.TokenUsage, "Token 用量");
-    public string ResetCreditsOrderSummary => BuildDisplayOrderSummary(HudDisplayItem.ResetCredits, "重置次数");
-    public bool CanMoveShortWindowUp => CanMoveDisplayItem(HudDisplayItem.ShortWindow, moveUp: true);
-    public bool CanMoveShortWindowDown => CanMoveDisplayItem(HudDisplayItem.ShortWindow, moveUp: false);
-    public bool CanMoveLongWindowUp => CanMoveDisplayItem(HudDisplayItem.LongWindow, moveUp: true);
-    public bool CanMoveLongWindowDown => CanMoveDisplayItem(HudDisplayItem.LongWindow, moveUp: false);
-    public bool CanMoveTokenUsageUp => CanMoveDisplayItem(HudDisplayItem.TokenUsage, moveUp: true);
-    public bool CanMoveTokenUsageDown => CanMoveDisplayItem(HudDisplayItem.TokenUsage, moveUp: false);
-    public bool CanMoveResetCreditsUp => CanMoveDisplayItem(HudDisplayItem.ResetCredits, moveUp: true);
-    public bool CanMoveResetCreditsDown => CanMoveDisplayItem(HudDisplayItem.ResetCredits, moveUp: false);
-    public IReadOnlyList<DisplayOrderRow> DisplayOrderRows => BuildDisplayOrderRows();
+    public IReadOnlyList<DisplayOrderRow> DisplayOrderRows => _displayOrderRows;
     public string AutoRefreshHintText => _settings.AutoRefreshEnabled
-        ? "控制后台拉取频率和手动刷新行为。"
+        ? $"常规刷新间隔 {FormatRefreshInterval(GetRegularRefreshIntervalSeconds(_settings))}。首次读取和重置次数到期时，系统会按需提前刷新。"
         : "自动刷新已关闭，频率选项暂不可用。";
-    public string ShortWindowMenuText => BuildWindowMenuText(_latestSnapshot?.ShortWindowMinutes, "短周期");
-    public string LongWindowMenuText => BuildWindowMenuText(_latestSnapshot?.LongWindowMinutes, "长周期");
 
     public OverlayViewModel(
         IRateLimitService rateLimitService,
@@ -204,12 +199,17 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         _windowTracker = windowTracker;
         _codexDesktopLauncher = codexDesktopLauncher;
         _logger = logger;
+        _displayOrderRows = new ObservableCollection<DisplayOrderRow>(GetOrderedDisplayItems().Select(CreateDisplayOrderRow));
+        UpdateDisplayOrderRows();
+        UpdatePreview();
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        RefreshLaunchHudAtSignIn();
         _settings = NormalizeSettings(await _hudSettingsStore.LoadAsync(cancellationToken));
         ApplySettings();
+        UpdatePreview();
         await TryLaunchCodexOnStartupAsync(cancellationToken);
         await RefreshAsync(cancellationToken);
 
@@ -240,13 +240,14 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
 
     public Task PersistSettingsWindowBoundsAsync(Window window, CancellationToken cancellationToken = default)
     {
+        var bounds = new Rect(window.Left, window.Top, window.Width, window.Height);
         return UpdateSettingsAsync(
-            _settings with
+            settings => settings with
             {
-                SettingsWindowLeft = window.Left,
-                SettingsWindowTop = window.Top,
-                SettingsWindowWidth = window.Width,
-                SettingsWindowHeight = window.Height
+                SettingsWindowLeft = bounds.Left,
+                SettingsWindowTop = bounds.Top,
+                SettingsWindowWidth = bounds.Width,
+                SettingsWindowHeight = bounds.Height
             },
             cancellationToken);
     }
@@ -310,9 +311,12 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
 
             IsCodexWindowAvailable = true;
             var snapshot = await _rateLimitService.GetLatestSnapshotAsync(cancellationToken);
-            _latestSnapshot = snapshot;
-            ApplySnapshot(snapshot);
-            _hasSnapshot = true;
+            await _dispatcher.InvokeAsync(() =>
+            {
+                _latestSnapshot = snapshot;
+                ApplySnapshot(snapshot);
+                _hasSnapshot = true;
+            }, DispatcherPriority.DataBind, cancellationToken);
         }
         catch (Exception exception)
         {
@@ -333,6 +337,19 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     }
 
     private void ApplySnapshot(UsageSnapshot snapshot)
+    {
+        var display = BuildHudDisplay(snapshot);
+        DisplayText = display.FullText;
+        CompactDisplayText = display.CompactText;
+        MinimalDisplayText = display.MinimalText;
+        _displaySegments = display.FullSegments;
+        _compactDisplaySegments = display.CompactSegments;
+        _minimalDisplaySegments = display.MinimalSegments;
+        UpdatePreview(display);
+        UpdateDisplayForegroundBrush();
+    }
+
+    private HudDisplay BuildHudDisplay(UsageSnapshot snapshot)
     {
         var fullSegments = new List<string>();
         var compactSegments = new List<string>();
@@ -405,16 +422,49 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         }
 
         var separator = _settings.ShowSeparatorDots ? "  ·  " : "   ";
-        DisplayText = fullSegments.Count > 0 ? string.Join(separator, fullSegments) : "HUD 已隐藏";
-        CompactDisplayText = compactSegments.Count > 0 ? string.Join(separator, compactSegments) : DisplayText;
-        MinimalDisplayText = BuildMinimalDisplayText(shortWindowSegments.Compact, compactSegments);
-        _displaySegments = JoinDisplaySegments(fullDisplaySegments, separator);
-        _compactDisplaySegments = JoinDisplaySegments(compactDisplaySegments, separator);
-        _minimalDisplaySegments = BuildMinimalDisplaySegments(shortWindowSegments.CompactSegments, _compactDisplaySegments);
+        var fullText = fullSegments.Count > 0 ? string.Join(separator, fullSegments) : "HUD 已隐藏";
+        var joinedCompactSegments = JoinDisplaySegments(compactDisplaySegments, separator);
+        return new HudDisplay(
+            fullText,
+            compactSegments.Count > 0 ? string.Join(separator, compactSegments) : fullText,
+            BuildMinimalDisplayText(shortWindowSegments.Compact, compactSegments),
+            JoinDisplaySegments(fullDisplaySegments, separator),
+            joinedCompactSegments,
+            BuildMinimalDisplaySegments(shortWindowSegments.CompactSegments, joinedCompactSegments));
+    }
 
-        OnPropertyChanged(nameof(ShortWindowMenuText));
-        OnPropertyChanged(nameof(LongWindowMenuText));
-        UpdateDisplayForegroundBrush();
+    private void UpdatePreview(HudDisplay? display = null)
+    {
+        display ??= BuildHudDisplay(CreateSampleSnapshot());
+        PreviewCandidates = display.FullSegments.Count == 0
+            ? [[new StyledDisplaySegment(display.FullText, SystemColors.GrayTextBrush)]]
+            : _settings.DisplayMode switch
+            {
+                HudDisplayMode.Full => [display.FullSegments],
+                HudDisplayMode.Compact => [display.CompactSegments],
+                _ => [display.FullSegments, display.CompactSegments]
+            };
+        OnPropertyChanged(nameof(IsPreviewSample));
+    }
+
+    private static UsageSnapshot CreateSampleSnapshot()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new UsageSnapshot
+        {
+            FetchedAt = now,
+            ShortWindowMinutes = 300,
+            ShortWindowUsedPercent = 21,
+            ShortWindowResetsAt = now.AddHours(2),
+            LongWindowMinutes = 10080,
+            LongWindowUsedPercent = 3,
+            LongWindowResetsAt = now.AddDays(5),
+            ResetCreditsAvailable = 1,
+            ResetCreditExpirations = [now.AddDays(4)],
+            CurrentTokenUsage = new TokenUsageRangeSnapshot { InputTokens = 11000, OutputTokens = 1200 },
+            TodayTokenUsage = new TokenUsageRangeSnapshot { InputTokens = 42000, OutputTokens = 6300 },
+            CurrentPeriodTokenUsage = new TokenUsageRangeSnapshot { InputTokens = 280000, OutputTokens = 46000 }
+        };
     }
 
     [RelayCommand]
@@ -422,87 +472,129 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task ToggleShortWindowAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowShortWindow = !_settings.ShowShortWindow }, cancellationToken);
+        UpdateSettingsAsync(settings => CanToggleShortWindow ? settings with { ShowShortWindow = !settings.ShowShortWindow } : settings, cancellationToken);
 
     [RelayCommand]
     private Task ToggleLongWindowAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowLongWindow = !_settings.ShowLongWindow }, cancellationToken);
+        UpdateSettingsAsync(settings => CanToggleLongWindow ? settings with { ShowLongWindow = !settings.ShowLongWindow } : settings, cancellationToken);
 
     [RelayCommand]
     private Task ToggleResetCreditsAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowResetCredits = !_settings.ShowResetCredits }, cancellationToken);
+        UpdateSettingsAsync(settings => CanToggleResetCredits ? settings with { ShowResetCredits = !settings.ShowResetCredits } : settings, cancellationToken);
 
     [RelayCommand]
     private Task ToggleTokenUsageAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowTokenUsage = !_settings.ShowTokenUsage }, cancellationToken);
+        UpdateSettingsAsync(settings => CanToggleTokenUsage ? settings with { ShowTokenUsage = !settings.ShowTokenUsage } : settings, cancellationToken);
 
     [RelayCommand]
     private Task ToggleAutoLaunchCodexOnStartupAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { AutoLaunchCodexOnStartup = !_settings.AutoLaunchCodexOnStartup }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { AutoLaunchCodexOnStartup = !settings.AutoLaunchCodexOnStartup }, cancellationToken);
+
+    public void RefreshLaunchHudAtSignIn()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryPath);
+            LaunchHudAtSignIn = key?.GetValue(StartupRegistryValueName) is string value && !string.IsNullOrWhiteSpace(value);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to read HUD startup registration.");
+        }
+
+        OnPropertyChanged(nameof(LaunchHudAtSignIn));
+    }
+
+    [RelayCommand]
+    private void ToggleLaunchHudAtSignIn()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(StartupRegistryPath)
+                ?? throw new InvalidOperationException("无法打开 Windows 启动项。");
+            if (LaunchHudAtSignIn)
+            {
+                key.DeleteValue(StartupRegistryValueName, throwOnMissingValue: false);
+            }
+            else
+            {
+                var executablePath = Environment.ProcessPath
+                    ?? throw new InvalidOperationException("无法确定 HUD 程序路径。");
+                key.SetValue(StartupRegistryValueName, $"\"{executablePath}\"", RegistryValueKind.String);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to update HUD startup registration.");
+            MessageBox.Show($"无法修改开机启动设置：{exception.Message}", "设置失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        RefreshLaunchHudAtSignIn();
+    }
 
     [RelayCommand]
     private Task ToggleAutoRefreshAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { AutoRefreshEnabled = !_settings.AutoRefreshEnabled }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { AutoRefreshEnabled = !settings.AutoRefreshEnabled }, cancellationToken);
 
     [RelayCommand]
     private Task SetDisplayModeAutoAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { DisplayMode = HudDisplayMode.Auto }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { DisplayMode = HudDisplayMode.Auto }, cancellationToken);
 
     [RelayCommand]
     private Task SetDisplayModeFullAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { DisplayMode = HudDisplayMode.Full }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { DisplayMode = HudDisplayMode.Full }, cancellationToken);
 
     [RelayCommand]
     private Task SetDisplayModeCompactAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { DisplayMode = HudDisplayMode.Compact }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { DisplayMode = HudDisplayMode.Compact }, cancellationToken);
 
     [RelayCommand]
     private Task SetRefreshEvery20SecondsAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { RefreshIntervalSeconds = 20 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { RefreshIntervalSeconds = 20 }, cancellationToken);
 
     [RelayCommand]
     private Task SetRefreshEvery60SecondsAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { RefreshIntervalSeconds = 60 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { RefreshIntervalSeconds = 60 }, cancellationToken);
 
     [RelayCommand]
     private Task SetRefreshEvery300SecondsAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { RefreshIntervalSeconds = 300 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { RefreshIntervalSeconds = 300 }, cancellationToken);
 
     [RelayCommand]
     private Task SetFontSize14Async(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { FontSize = 14 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { FontSize = 14 }, cancellationToken);
 
     [RelayCommand]
     private Task SetFontSize16Async(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { FontSize = 16 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { FontSize = 16 }, cancellationToken);
 
     [RelayCommand]
     private Task SetFontSize18Async(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { FontSize = 18 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { FontSize = 18 }, cancellationToken);
 
     [RelayCommand]
     private Task SetFontSize20Async(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { FontSize = 20 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { FontSize = 20 }, cancellationToken);
 
     [RelayCommand]
     private Task SetFontSize22Async(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { FontSize = 22 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { FontSize = 22 }, cancellationToken);
 
     [RelayCommand]
     private Task SetFontSize24Async(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { FontSize = 24 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { FontSize = 24 }, cancellationToken);
 
     [RelayCommand]
     private Task SetHorizontalAlignmentLeftAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { HorizontalAlignment = HudHorizontalAlignment.Left }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { HorizontalAlignment = HudHorizontalAlignment.Left }, cancellationToken);
 
     [RelayCommand]
     private Task SetHorizontalAlignmentCenterAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { HorizontalAlignment = HudHorizontalAlignment.Center }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { HorizontalAlignment = HudHorizontalAlignment.Center }, cancellationToken);
 
     [RelayCommand]
     private Task SetHorizontalAlignmentRightAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { HorizontalAlignment = HudHorizontalAlignment.Right }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { HorizontalAlignment = HudHorizontalAlignment.Right }, cancellationToken);
 
     [RelayCommand]
     private Task NudgePositionLeftAsync(CancellationToken cancellationToken) =>
@@ -529,36 +621,36 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task SetColorModeDefaultAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ColorMode = HudColorMode.Default }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ColorMode = HudColorMode.Default }, cancellationToken);
 
     [RelayCommand]
     private Task SetColorModeCustomAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ColorMode = HudColorMode.Custom }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ColorMode = HudColorMode.Custom }, cancellationToken);
 
     [RelayCommand]
     private Task SetColorModeDynamicAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ColorMode = HudColorMode.DynamicByRemainingPercent }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ColorMode = HudColorMode.DynamicByRemainingPercent }, cancellationToken);
 
     [RelayCommand]
     private Task ApplyBaseForegroundColorAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { BaseForegroundColorHex = BaseForegroundColorInput }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { BaseForegroundColorHex = BaseForegroundColorInput }, cancellationToken);
 
     [RelayCommand]
     private Task ApplyDynamicHighRemainingColorAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { DynamicHighRemainingColorHex = DynamicHighRemainingColorInput }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { DynamicHighRemainingColorHex = DynamicHighRemainingColorInput }, cancellationToken);
 
     [RelayCommand]
     private Task ApplyDynamicMediumRemainingColorAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { DynamicMediumRemainingColorHex = DynamicMediumRemainingColorInput }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { DynamicMediumRemainingColorHex = DynamicMediumRemainingColorInput }, cancellationToken);
 
     [RelayCommand]
     private Task ApplyDynamicLowRemainingColorAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { DynamicLowRemainingColorHex = DynamicLowRemainingColorInput }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { DynamicLowRemainingColorHex = DynamicLowRemainingColorInput }, cancellationToken);
 
     [RelayCommand]
     private Task ResetColorsToDefaultAsync(CancellationToken cancellationToken) =>
         UpdateSettingsAsync(
-            _settings with
+            settings => settings with
             {
                 BaseForegroundColorHex = DefaultForegroundColorHex,
                 DynamicHighRemainingColorHex = DefaultHighRemainingColorHex,
@@ -576,7 +668,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         lowThreshold = Math.Clamp(lowThreshold, 0, mediumThreshold - 1);
 
         return UpdateSettingsAsync(
-            _settings with
+            settings => settings with
             {
                 DynamicLowRemainingThresholdPercent = lowThreshold,
                 DynamicMediumRemainingThresholdPercent = mediumThreshold
@@ -624,104 +716,101 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
             return;
         }
 
-        await UpdateSettingsAsync(imported, cancellationToken);
+        await UpdateSettingsAsync(_ => imported, cancellationToken);
     }
 
     [RelayCommand]
     private Task ToggleShowShortWindowLabelAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowShortWindowLabel = !_settings.ShowShortWindowLabel }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ShowShortWindowLabel = !settings.ShowShortWindowLabel }, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowShortRemainingPercentAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowShortRemainingPercent = !_settings.ShowShortRemainingPercent }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ShowShortRemainingPercent = !settings.ShowShortRemainingPercent }, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowShortResetTimeAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowShortResetTime = !_settings.ShowShortResetTime }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ShowShortResetTime = !settings.ShowShortResetTime }, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowLongWindowLabelAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowLongWindowLabel = !_settings.ShowLongWindowLabel }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ShowLongWindowLabel = !settings.ShowLongWindowLabel }, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowLongRemainingPercentAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowLongRemainingPercent = !_settings.ShowLongRemainingPercent }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ShowLongRemainingPercent = !settings.ShowLongRemainingPercent }, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowLongResetTimeAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowLongResetTime = !_settings.ShowLongResetTime }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ShowLongResetTime = !settings.ShowLongResetTime }, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowResetCreditsLabelAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowResetCreditsLabel = !_settings.ShowResetCreditsLabel }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ShowResetCreditsLabel = !settings.ShowResetCreditsLabel }, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowCurrentTokenUsageAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowCurrentTokenUsage = !_settings.ShowCurrentTokenUsage }, cancellationToken);
+        UpdateSettingsAsync(settings => CanToggleCurrentTokenUsage ? settings with { ShowCurrentTokenUsage = !settings.ShowCurrentTokenUsage } : settings, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowTodayTokenUsageAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowTodayTokenUsage = !_settings.ShowTodayTokenUsage }, cancellationToken);
+        UpdateSettingsAsync(settings => CanToggleTodayTokenUsage ? settings with { ShowTodayTokenUsage = !settings.ShowTodayTokenUsage } : settings, cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowCurrentPeriodTokenUsageAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowCurrentPeriodTokenUsage = !_settings.ShowCurrentPeriodTokenUsage }, cancellationToken);
+        UpdateSettingsAsync(settings => CanToggleCurrentPeriodTokenUsage ? settings with { ShowCurrentPeriodTokenUsage = !settings.ShowCurrentPeriodTokenUsage } : settings, cancellationToken);
 
     [RelayCommand]
     private Task SetTokenUsageTotalFormatAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { TokenUsageDisplayFormat = TokenUsageDisplayFormat.Total }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { TokenUsageDisplayFormat = TokenUsageDisplayFormat.Total }, cancellationToken);
 
     [RelayCommand]
     private Task SetTokenUsageInputOutputFormatAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { TokenUsageDisplayFormat = TokenUsageDisplayFormat.InputOutput }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { TokenUsageDisplayFormat = TokenUsageDisplayFormat.InputOutput }, cancellationToken);
 
     [RelayCommand]
     private Task SetTokenUsageAutoUnitFormatAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { TokenUsageUnitFormat = TokenUsageUnitFormat.Auto }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { TokenUsageUnitFormat = TokenUsageUnitFormat.Auto }, cancellationToken);
 
     [RelayCommand]
     private Task SetTokenUsageFullUnitFormatAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { TokenUsageUnitFormat = TokenUsageUnitFormat.Full }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { TokenUsageUnitFormat = TokenUsageUnitFormat.Full }, cancellationToken);
 
     [RelayCommand]
     private Task SetTokenUsageRefreshEvery10SecondsAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { TokenUsageRefreshIntervalSeconds = 10 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { TokenUsageRefreshIntervalSeconds = 10 }, cancellationToken);
 
     [RelayCommand]
     private Task SetTokenUsageRefreshEvery20SecondsAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { TokenUsageRefreshIntervalSeconds = 20 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { TokenUsageRefreshIntervalSeconds = 20 }, cancellationToken);
 
     [RelayCommand]
     private Task SetTokenUsageRefreshEvery60SecondsAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { TokenUsageRefreshIntervalSeconds = 60 }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { TokenUsageRefreshIntervalSeconds = 60 }, cancellationToken);
 
     [RelayCommand]
-    private Task ToggleShowResetCreditsNearestExpirationAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(
-            _settings.ShowResetCreditsNearestExpiration
-                ? _settings with { ShowResetCreditsNearestExpiration = false }
-                : _settings with
-                {
-                    ShowResetCreditsNearestExpiration = true,
-                    ShowResetCreditsAllExpirations = false
-                },
-            cancellationToken);
+    private Task HideResetCreditExpirationsAsync(CancellationToken cancellationToken) =>
+        SetResetCreditExpirationsAsync(nearest: false, all: false, cancellationToken);
 
     [RelayCommand]
-    private Task ToggleShowResetCreditsAllExpirationsAsync(CancellationToken cancellationToken) =>
+    private Task ShowNearestResetCreditExpirationAsync(CancellationToken cancellationToken) =>
+        SetResetCreditExpirationsAsync(nearest: true, all: false, cancellationToken);
+
+    [RelayCommand]
+    private Task ShowAllResetCreditExpirationsAsync(CancellationToken cancellationToken) =>
+        SetResetCreditExpirationsAsync(nearest: false, all: true, cancellationToken);
+
+    private Task SetResetCreditExpirationsAsync(bool nearest, bool all, CancellationToken cancellationToken) =>
         UpdateSettingsAsync(
-            _settings.ShowResetCreditsAllExpirations
-                ? _settings with { ShowResetCreditsAllExpirations = false }
-                : _settings with
-                {
-                    ShowResetCreditsAllExpirations = true,
-                    ShowResetCreditsNearestExpiration = false
-                },
+            settings => settings with
+            {
+                ShowResetCreditsNearestExpiration = nearest,
+                ShowResetCreditsAllExpirations = all
+            },
             cancellationToken);
 
     [RelayCommand]
     private Task ToggleShowSeparatorDotsAsync(CancellationToken cancellationToken) =>
-        UpdateSettingsAsync(_settings with { ShowSeparatorDots = !_settings.ShowSeparatorDots }, cancellationToken);
+        UpdateSettingsAsync(settings => settings with { ShowSeparatorDots = !settings.ShowSeparatorDots }, cancellationToken);
 
     [RelayCommand]
     private Task MoveShortWindowUpAsync(CancellationToken cancellationToken) =>
@@ -755,13 +844,15 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
     private Task MoveResetCreditsDownAsync(CancellationToken cancellationToken) =>
         MoveDisplayItemAsync(HudDisplayItem.ResetCredits, moveUp: false, cancellationToken);
 
-    private async Task UpdateSettingsAsync(HudSettings settings, CancellationToken cancellationToken)
+    private async Task UpdateSettingsAsync(Func<HudSettings, HudSettings> update, CancellationToken cancellationToken)
     {
         await _settingsGate.WaitAsync(cancellationToken);
         try
         {
-            _settings = NormalizeSettings(settings);
-            await _hudSettingsStore.SaveAsync(_settings, cancellationToken);
+            var updated = NormalizeSettings(update(_settings));
+            await _hudSettingsStore.SaveAsync(updated, cancellationToken);
+            _settings = updated;
+            SettingsSaveError = null;
             ApplySettings();
 
             if (_latestSnapshot is not null)
@@ -770,12 +861,18 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
             }
             else
             {
-                UpdateDisplayForegroundBrush();
+                UpdatePreview();
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ApplySettings();
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Failed to update HUD settings.");
+            SettingsSaveError = "设置未保存，请重试。";
+            ApplySettings();
         }
         finally
         {
@@ -809,7 +906,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanToggleTodayTokenUsage));
         OnPropertyChanged(nameof(CanToggleCurrentPeriodTokenUsage));
         OnPropertyChanged(nameof(IsOnlyOneDisplayItemEnabled));
-        OnPropertyChanged(nameof(DisplayItemsHintText));
+        OnPropertyChanged(nameof(IsOnlyOneTokenUsageRangeEnabled));
         OnPropertyChanged(nameof(AutoLaunchCodexOnStartup));
         OnPropertyChanged(nameof(AutoRefreshEnabled));
         OnPropertyChanged(nameof(IsDisplayModeAuto));
@@ -854,24 +951,9 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowResetCreditsLabel));
         OnPropertyChanged(nameof(ShowResetCreditsNearestExpiration));
         OnPropertyChanged(nameof(ShowResetCreditsAllExpirations));
+        OnPropertyChanged(nameof(HideResetCreditExpirations));
         OnPropertyChanged(nameof(ShowSeparatorDots));
-        OnPropertyChanged(nameof(ShortWindowOrder));
-        OnPropertyChanged(nameof(LongWindowOrder));
-        OnPropertyChanged(nameof(TokenUsageOrder));
-        OnPropertyChanged(nameof(ResetCreditsOrder));
-        OnPropertyChanged(nameof(ShortWindowOrderSummary));
-        OnPropertyChanged(nameof(LongWindowOrderSummary));
-        OnPropertyChanged(nameof(TokenUsageOrderSummary));
-        OnPropertyChanged(nameof(ResetCreditsOrderSummary));
-        OnPropertyChanged(nameof(DisplayOrderRows));
-        OnPropertyChanged(nameof(CanMoveShortWindowUp));
-        OnPropertyChanged(nameof(CanMoveShortWindowDown));
-        OnPropertyChanged(nameof(CanMoveLongWindowUp));
-        OnPropertyChanged(nameof(CanMoveLongWindowDown));
-        OnPropertyChanged(nameof(CanMoveTokenUsageUp));
-        OnPropertyChanged(nameof(CanMoveTokenUsageDown));
-        OnPropertyChanged(nameof(CanMoveResetCreditsUp));
-        OnPropertyChanged(nameof(CanMoveResetCreditsDown));
+        UpdateDisplayOrderRows();
         OnPropertyChanged(nameof(AutoRefreshHintText));
         UpdateDisplayForegroundBrush();
     }
@@ -1301,29 +1383,55 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         return "用量读取失败";
     }
 
-    private static string BuildWindowMenuText(int? minutes, string fallbackName)
+    private DisplayOrderRow CreateDisplayOrderRow(HudDisplayItem item) => new(
+        item,
+        GetDisplayItemLabel(item),
+        item switch
+        {
+            HudDisplayItem.ShortWindow => ToggleShortWindowCommand,
+            HudDisplayItem.LongWindow => ToggleLongWindowCommand,
+            HudDisplayItem.TokenUsage => ToggleTokenUsageCommand,
+            _ => ToggleResetCreditsCommand
+        },
+        GetMoveUpCommand(item),
+        GetMoveDownCommand(item));
+
+    private void UpdateDisplayOrderRows()
     {
-        return minutes.HasValue
-            ? $"显示{fallbackName}用量（{FormatWindow(minutes)}）"
-            : $"显示{fallbackName}用量";
+        var ordered = GetOrderedDisplayItems();
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            var item = ordered[index];
+            var row = _displayOrderRows.First(row => row.Item == item);
+            var (isShown, canToggle, summary) = item switch
+            {
+                HudDisplayItem.ShortWindow => (ShowShortWindow, CanToggleShortWindow,
+                    SummarizeFields(ShowShortWindowLabel ? "标签" : null, ShowShortRemainingPercent ? "余量" : null,
+                        ShowShortResetTime ? "重置时间" : null)),
+                HudDisplayItem.LongWindow => (ShowLongWindow, CanToggleLongWindow,
+                    SummarizeFields(ShowLongWindowLabel ? "标签" : null, ShowLongRemainingPercent ? "余量" : null,
+                        ShowLongResetTime ? "重置时间" : null)),
+                HudDisplayItem.TokenUsage => (ShowTokenUsage, CanToggleTokenUsage,
+                    SummarizeFields(ShowCurrentTokenUsage ? "本次" : null, ShowTodayTokenUsage ? "今日" : null,
+                        ShowCurrentPeriodTokenUsage ? "本周期" : null)),
+                _ => (ShowResetCredits, CanToggleResetCredits,
+                    SummarizeFields(ShowResetCreditsLabel ? "显示标签" : "次数",
+                        ShowResetCreditsAllExpirations ? "全部到期" : ShowResetCreditsNearestExpiration ? "最近到期" : null))
+            };
+            row.Update(index + 1, isShown, canToggle, summary);
+
+            var previousIndex = _displayOrderRows.IndexOf(row);
+            if (previousIndex != index)
+            {
+                _displayOrderRows.Move(previousIndex, index);
+            }
+        }
     }
 
-    private string BuildDisplayOrderSummary(HudDisplayItem item, string label)
+    private static string SummarizeFields(params string?[] fields)
     {
-        var order = GetDisplayOrder(item) + 1;
-        return $"第 {order} 位: {label}";
-    }
-
-    private IReadOnlyList<DisplayOrderRow> BuildDisplayOrderRows()
-    {
-        return GetOrderedDisplayItems()
-            .Select(item => new DisplayOrderRow(
-                BuildDisplayOrderSummary(item, GetDisplayItemLabel(item)),
-                GetMoveUpCommand(item),
-                GetMoveDownCommand(item),
-                CanMoveDisplayItem(item, moveUp: true),
-                CanMoveDisplayItem(item, moveUp: false)))
-            .ToArray();
+        var summary = string.Join(" · ", fields.OfType<string>());
+        return summary.Length == 0 ? "未选择细项" : summary;
     }
 
     private IReadOnlyList<HudDisplayItem> GetOrderedDisplayItems()
@@ -1353,28 +1461,27 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         return moveUp ? order > 0 : order < 3;
     }
 
-    private Task MoveDisplayItemAsync(HudDisplayItem item, bool moveUp, CancellationToken cancellationToken)
-    {
-        if (!CanMoveDisplayItem(item, moveUp))
+    private Task MoveDisplayItemAsync(HudDisplayItem item, bool moveUp, CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(settings =>
         {
-            return Task.CompletedTask;
-        }
+            if (!CanMoveDisplayItem(item, moveUp))
+            {
+                return settings;
+            }
 
-        var ordered = GetOrderedDisplayItems().ToList();
-        var index = ordered.IndexOf(item);
-        var swapIndex = moveUp ? index - 1 : index + 1;
-        (ordered[index], ordered[swapIndex]) = (ordered[swapIndex], ordered[index]);
+            var ordered = GetOrderedDisplayItems().ToList();
+            var index = ordered.IndexOf(item);
+            var swapIndex = moveUp ? index - 1 : index + 1;
+            (ordered[index], ordered[swapIndex]) = (ordered[swapIndex], ordered[index]);
 
-        return UpdateSettingsAsync(
-            _settings with
+            return settings with
             {
                 ShortWindowOrder = ordered.IndexOf(HudDisplayItem.ShortWindow),
                 LongWindowOrder = ordered.IndexOf(HudDisplayItem.LongWindow),
                 TokenUsageOrder = ordered.IndexOf(HudDisplayItem.TokenUsage),
                 ResetCreditsOrder = ordered.IndexOf(HudDisplayItem.ResetCredits)
-            },
-            cancellationToken);
-    }
+            };
+        }, cancellationToken);
 
     private static string GetDisplayItemLabel(HudDisplayItem item) => item switch
     {
@@ -1650,7 +1757,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _ = UpdateSettingsAsync(_settings with { BaseForegroundColorHex = value }, CancellationToken.None);
+        _ = UpdateSettingsAsync(settings => settings with { BaseForegroundColorHex = value }, CancellationToken.None);
     }
 
     partial void OnDynamicHighRemainingColorInputChanged(string value)
@@ -1660,7 +1767,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _ = UpdateSettingsAsync(_settings with { DynamicHighRemainingColorHex = value }, CancellationToken.None);
+        _ = UpdateSettingsAsync(settings => settings with { DynamicHighRemainingColorHex = value }, CancellationToken.None);
     }
 
     partial void OnDynamicMediumRemainingColorInputChanged(string value)
@@ -1670,7 +1777,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _ = UpdateSettingsAsync(_settings with { DynamicMediumRemainingColorHex = value }, CancellationToken.None);
+        _ = UpdateSettingsAsync(settings => settings with { DynamicMediumRemainingColorHex = value }, CancellationToken.None);
     }
 
     partial void OnDynamicLowRemainingColorInputChanged(string value)
@@ -1680,7 +1787,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _ = UpdateSettingsAsync(_settings with { DynamicLowRemainingColorHex = value }, CancellationToken.None);
+        _ = UpdateSettingsAsync(settings => settings with { DynamicLowRemainingColorHex = value }, CancellationToken.None);
     }
 
     partial void OnDynamicMediumThresholdPercentInputChanged(string value)
@@ -1718,7 +1825,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
             _isSyncingEditorInputs = false;
         }
 
-        _ = UpdateSettingsAsync(_settings with { TextOpacityPercent = normalizedOpacity }, CancellationToken.None);
+        _ = UpdateSettingsAsync(settings => settings with { TextOpacityPercent = normalizedOpacity }, CancellationToken.None);
     }
 
     private void AutoApplyDynamicThresholds()
@@ -1729,7 +1836,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         lowThreshold = Math.Clamp(lowThreshold, 0, mediumThreshold - 1);
 
         _ = UpdateSettingsAsync(
-            _settings with
+            settings => settings with
             {
                 DynamicLowRemainingThresholdPercent = lowThreshold,
                 DynamicMediumRemainingThresholdPercent = mediumThreshold
@@ -1831,42 +1938,35 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         return true;
     }
 
-    private Task UpdateCurrentAlignmentOffsetsAsync(int deltaX, int deltaY, CancellationToken cancellationToken)
-    {
-        var currentOffsetX = GetCurrentPositionOffsetX(_settings);
-        var currentOffsetY = GetCurrentPositionOffsetY(_settings);
-        return SetCurrentAlignmentOffsetsAsync(
-            Math.Clamp(currentOffsetX + deltaX, -MaxPositionOffsetPx, MaxPositionOffsetPx),
-            Math.Clamp(currentOffsetY + deltaY, -MaxPositionOffsetPx, MaxPositionOffsetPx),
+    private Task UpdateCurrentAlignmentOffsetsAsync(int deltaX, int deltaY, CancellationToken cancellationToken) =>
+        UpdateSettingsAsync(settings => WithCurrentAlignmentOffsets(
+            settings,
+            Math.Clamp(GetCurrentPositionOffsetX(settings) + deltaX, -MaxPositionOffsetPx, MaxPositionOffsetPx),
+            Math.Clamp(GetCurrentPositionOffsetY(settings) + deltaY, -MaxPositionOffsetPx, MaxPositionOffsetPx)),
             cancellationToken);
-    }
 
     private Task ResetCurrentAlignmentOffsetsAsync(CancellationToken cancellationToken) =>
-        SetCurrentAlignmentOffsetsAsync(0, 0, cancellationToken);
+        UpdateSettingsAsync(settings => WithCurrentAlignmentOffsets(settings, 0, 0), cancellationToken);
 
-    private Task SetCurrentAlignmentOffsetsAsync(int offsetX, int offsetY, CancellationToken cancellationToken)
-    {
-        var updatedSettings = _settings.HorizontalAlignment switch
+    private static HudSettings WithCurrentAlignmentOffsets(HudSettings settings, int offsetX, int offsetY) =>
+        settings.HorizontalAlignment switch
         {
-            HudHorizontalAlignment.Left => _settings with
+            HudHorizontalAlignment.Left => settings with
             {
                 LeftPositionOffsetX = offsetX,
                 LeftPositionOffsetY = offsetY
             },
-            HudHorizontalAlignment.Right => _settings with
+            HudHorizontalAlignment.Right => settings with
             {
                 RightPositionOffsetX = offsetX,
                 RightPositionOffsetY = offsetY
             },
-            _ => _settings with
+            _ => settings with
             {
                 CenterPositionOffsetX = offsetX,
                 CenterPositionOffsetY = offsetY
             }
         };
-
-        return UpdateSettingsAsync(updatedSettings, cancellationToken);
-    }
 
     private static int GetCurrentPositionOffsetX(HudSettings settings) => settings.HorizontalAlignment switch
     {
@@ -1906,10 +2006,7 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         UsageSnapshot? snapshot,
         DateTimeOffset utcNow)
     {
-        var baseInterval = Math.Clamp(settings.RefreshIntervalSeconds, 5, 3600);
-        var effectiveInterval = !settings.ShowTokenUsage
-            ? baseInterval
-            : Math.Min(baseInterval, Math.Clamp(settings.TokenUsageRefreshIntervalSeconds, 5, 3600));
+        var effectiveInterval = GetRegularRefreshIntervalSeconds(settings);
 
         if (!HasAvailableCreditExpiringToday(snapshot, utcNow))
         {
@@ -1926,6 +2023,17 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
 
         return TimeSpan.FromSeconds(Math.Min(effectiveInterval, ExpiryDayRefreshIntervalSeconds));
     }
+
+    private static int GetRegularRefreshIntervalSeconds(HudSettings settings)
+    {
+        var baseInterval = Math.Clamp(settings.RefreshIntervalSeconds, 5, 3600);
+        return settings.ShowTokenUsage
+            ? Math.Min(baseInterval, Math.Clamp(settings.TokenUsageRefreshIntervalSeconds, 5, 3600))
+            : baseInterval;
+    }
+
+    private static string FormatRefreshInterval(int seconds) =>
+        seconds >= 60 ? $"{seconds / 60} 分钟" : $"{seconds} 秒";
 
     private static bool HasAvailableCreditExpiringToday(UsageSnapshot? snapshot, DateTimeOffset utcNow)
     {
@@ -1991,14 +2099,53 @@ public partial class OverlayViewModel : ObservableObject, IDisposable
         }
     }
 
-    public sealed record DisplayOrderRow(
-        string Summary,
-        ICommand MoveUpCommand,
-        ICommand MoveDownCommand,
-        bool CanMoveUp,
-        bool CanMoveDown);
+    public sealed class DisplayOrderRow(
+        HudDisplayItem item, string label, ICommand toggleCommand, ICommand moveUpCommand, ICommand moveDownCommand)
+        : ObservableObject
+    {
+        private bool _isExpanded;
+
+        public HudDisplayItem Item { get; } = item;
+        public string Label { get; } = label;
+        public ICommand ToggleCommand { get; } = toggleCommand;
+        public ICommand MoveUpCommand { get; } = moveUpCommand;
+        public ICommand MoveDownCommand { get; } = moveDownCommand;
+        public int Position { get; private set; }
+        public bool IsShown { get; private set; }
+        public bool CanToggle { get; private set; }
+        public bool CanMoveUp => Position > 1;
+        public bool CanMoveDown => Position < 4;
+        public string Summary { get; private set; } = string.Empty;
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set => SetProperty(ref _isExpanded, value);
+        }
+
+        public void Update(int position, bool isShown, bool canToggle, string summary)
+        {
+            Position = position;
+            IsShown = isShown;
+            CanToggle = canToggle;
+            Summary = isShown ? summary : "已隐藏";
+            OnPropertyChanged(nameof(Position));
+            OnPropertyChanged(nameof(IsShown));
+            OnPropertyChanged(nameof(CanToggle));
+            OnPropertyChanged(nameof(CanMoveUp));
+            OnPropertyChanged(nameof(CanMoveDown));
+            OnPropertyChanged(nameof(Summary));
+        }
+    }
 
     public sealed record StyledDisplaySegment(string Text, Brush Foreground);
+
+    private sealed record HudDisplay(
+        string FullText,
+        string CompactText,
+        string MinimalText,
+        IReadOnlyList<StyledDisplaySegment> FullSegments,
+        IReadOnlyList<StyledDisplaySegment> CompactSegments,
+        IReadOnlyList<StyledDisplaySegment> MinimalSegments);
 
     private sealed record UsageWindowSegments(
         string Full,
